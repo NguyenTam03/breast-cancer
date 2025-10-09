@@ -1,4 +1,12 @@
 .cursor
 .roo
+.clinerules
 csv/
 jpeg/
+backend/.env
+backend/app/__pycache__/
+backend/app/api/__pycache__/
+backend/app/core/__pycache__/
+backend/app/models/__pycache__/
+backend/app/ml/__pycache__/
+backend/uploads/
