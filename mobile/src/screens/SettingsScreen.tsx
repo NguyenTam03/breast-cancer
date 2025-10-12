@@ -3,18 +3,19 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   StatusBar,
   Alert,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import Card from '../components/Card';
 import { colors } from '../theme/colors';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -32,10 +33,33 @@ interface SettingItem {
 }
 
 export default function SettingsScreen({ navigation }: SettingsScreenProps) {
+  const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [biometric, setBiometric] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [autoUpload, setAutoUpload] = useState(false);
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Đăng xuất',
+      'Bạn có chắc chắn muốn đăng xuất?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        { 
+          text: 'Đăng xuất', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              await logout();
+              // Navigation sẽ được handle tự động bởi AuthContext
+            } catch (error) {
+              Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
+            }
+          }
+        },
+      ]
+    );
+  };
 
   const personalSettings: SettingItem[] = [
     {
@@ -229,8 +253,19 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
                 </View>
                 
                 <View style={styles.profileInfo}>
-                  <Text style={styles.profileName}>Người dùng</Text>
-                  <Text style={styles.profileEmail}>user@example.com</Text>
+                  <Text style={styles.profileName}>
+                    {user?.profile?.firstName && user?.profile?.lastName 
+                      ? `${user.profile.firstName} ${user.profile.lastName}` 
+                      : 'Người dùng'}
+                  </Text>
+                  <Text style={styles.profileEmail}>
+                    {user?.email || 'user@example.com'}
+                  </Text>
+                  <View style={styles.roleBadge}>
+                    <Text style={styles.roleText}>
+                      {user?.role === 'doctor' ? '👨‍⚕️ Bác sĩ' : '👤 Bệnh nhân'}
+                    </Text>
+                  </View>
                   <TouchableOpacity style={styles.editProfileButton}>
                     <Text style={styles.editProfileText}>Chỉnh sửa hồ sơ</Text>
                   </TouchableOpacity>
@@ -250,16 +285,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
             <Card style={styles.sectionCard} padding="none">
               <TouchableOpacity 
                 style={styles.logoutButton}
-                onPress={() => {
-                  Alert.alert(
-                    'Đăng xuất',
-                    'Bạn có chắc chắn muốn đăng xuất?',
-                    [
-                      { text: 'Hủy', style: 'cancel' },
-                      { text: 'Đăng xuất', style: 'destructive', onPress: () => console.log('Logout') },
-                    ]
-                  );
-                }}
+                onPress={handleLogout}
               >
                 <Ionicons name="log-out-outline" size={24} color="#f87171" />
                 <Text style={styles.logoutText}>Đăng xuất</Text>
@@ -355,7 +381,20 @@ const styles = StyleSheet.create({
   profileEmail: {
     color: '#8e8e93',
     fontSize: 14,
+    marginBottom: 8,
+  },
+  roleBadge: {
+    backgroundColor: 'rgba(76, 110, 245, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
     marginBottom: 12,
+  },
+  roleText: {
+    color: '#4c6ef5',
+    fontSize: 12,
+    fontWeight: '600',
   },
   editProfileButton: {
     backgroundColor: 'rgba(76, 110, 245, 0.2)',

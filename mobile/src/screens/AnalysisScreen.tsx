@@ -3,12 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   Animated,
   Alert,
+  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -20,9 +21,17 @@ import Card from '../components/Card';
 import { colors } from '../theme/colors';
 
 export default function AnalysisScreen({ route, navigation }: any) {
-  const { imageUri } = route.params;
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const { imageUri, analysisResult: existingResult, isFromHistory } = route.params;
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(existingResult || null);
   const [fadeAnim] = useState(new Animated.Value(1));
+
+  // API Base URL for images
+  const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';
+
+  // Determine the image source
+  const imageSource = isFromHistory && existingResult?.imageUrl 
+    ? `${API_BASE_URL}${existingResult.imageUrl}`
+    : imageUri;
 
   // Mutation for image analysis
   const analysisMutation = useMutation({
@@ -107,130 +116,138 @@ export default function AnalysisScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Image Display */}
-        <View style={styles.imageSection}>
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: imageUri }} style={styles.image} />
-            <LinearGradient 
-              colors={['transparent', 'rgba(0,0,0,0.7)'] as any}
-              style={styles.imageOverlay}
-            >
-              <View style={styles.imageInfo}>
-                <Ionicons name="camera" size={16} color="white" />
-                <Text style={styles.imageInfoText}>Hình ảnh được chọn</Text>
-              </View>
-            </LinearGradient>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Image Display */}
+          <View style={styles.imageSection}>
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: imageSource }} style={styles.image} />
+              <LinearGradient 
+                colors={['transparent', 'rgba(0,0,0,0.7)'] as any}
+                style={styles.imageOverlay}
+              >
+                <View style={styles.imageInfo}>
+                  <Ionicons name="camera" size={16} color="white" />
+                  <Text style={styles.imageInfoText}>
+                    {isFromHistory ? 'Ảnh từ lịch sử' : 'Hình ảnh được chọn'}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </View>
           </View>
-        </View>
 
-        {/* Analysis Section */}
-        {!analysisResult && !analysisMutation.isPending && (
-          <Card style={styles.analysisCard} padding="large">
-            <View style={styles.analysisContent}>
-              <View style={styles.analysisIcon}>
-                <Ionicons name="analytics" size={48} color="#4c6ef5" />
-              </View>
-              <Text style={styles.analysisTitle}>Sẵn sàng phân tích</Text>
-              <Text style={styles.analysisSubtitle}>
-                Hệ thống AI sẽ phân tích hình ảnh của bạn và đưa ra kết quả dự đoán
-              </Text>
-              <Button
-                title="Bắt đầu phân tích"
-                onPress={analyzeImage}
-                size="large"
-                style={styles.analyzeButton}
-              />
-            </View>
-          </Card>
-        )}
-
-        {/* Loading Section */}
-        {analysisMutation.isPending && (
-          <Card style={styles.loadingCard} padding="large">
-            <View style={styles.loadingContent}>
-              <View style={styles.loadingIcon}>
-                <Animated.View style={{ transform: [{ rotate: '45deg' }] }}>
+          {/* Analysis Section */}
+          {!analysisResult && !analysisMutation.isPending && (
+            <Card style={styles.analysisCard} padding="large">
+              <View style={styles.analysisContent}>
+                <View style={styles.analysisIcon}>
                   <Ionicons name="analytics" size={48} color="#4c6ef5" />
-                </Animated.View>
-              </View>
-              <Text style={styles.loadingTitle}>Đang phân tích...</Text>
-              <Text style={styles.loadingSubtitle}>
-                Vui lòng đợi trong khi AI phân tích hình ảnh của bạn
-              </Text>
-              <View style={styles.progressBar}>
-                <View style={styles.progressIndicator} />
-              </View>
-            </View>
-          </Card>
-        )}
-
-        {/* Results Section */}
-        {analysisResult && (
-          <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
-            <Card style={styles.resultCard} padding="large">
-              <View style={styles.resultHeader}>
-                <View style={styles.resultIconContainer}>
-                  <Ionicons 
-                    name={getResultIcon(analysisResult.prediction)} 
-                    size={32} 
-                    color={getResultColor(analysisResult.prediction)} 
-                  />
                 </View>
-                <View style={styles.resultInfo}>
-                  <Text style={styles.resultLabel}>Kết quả phân tích</Text>
-                  <Text style={[
-                    styles.resultValue,
-                    { color: getResultColor(analysisResult.prediction) }
-                  ]}>
-                    {getResultText(analysisResult.prediction)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.metricsContainer}>
-                <View style={styles.metric}>
-                  <Text style={styles.metricValue}>
-                    {(analysisResult.confidence * 100).toFixed(1)}%
-                  </Text>
-                  <Text style={styles.metricLabel}>Độ tin cậy</Text>
-                </View>
-                
-                <View style={styles.metricDivider} />
-                
-                <View style={styles.metric}>
-                  <Text style={styles.metricValue}>
-                    {analysisResult.processingTime}ms
-                  </Text>
-                  <Text style={styles.metricLabel}>Thời gian xử lý</Text>
-                </View>
-              </View>
-
-              <View style={styles.disclaimer}>
-                <Ionicons name="information-circle-outline" size={20} color="#fbbf24" />
-                <View style={styles.disclaimerText}>
-                  <Text style={styles.disclaimerTitle}>Lưu ý quan trọng</Text>
-                  <Text style={styles.disclaimerContent}>
-                    Kết quả này chỉ mang tính chất tham khảo. Vui lòng tham khảo ý kiến bác sĩ chuyên khoa.
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.actionButtons}>
+                <Text style={styles.analysisTitle}>Sẵn sàng phân tích</Text>
+                <Text style={styles.analysisSubtitle}>
+                  Hệ thống AI sẽ phân tích hình ảnh của bạn và đưa ra kết quả dự đoán
+                </Text>
                 <Button
-                  title="Lưu kết quả"
-                  onPress={saveResult}
-                  variant="outline"
-                  style={styles.actionButton}
-                />
-                <Button
-                  title="Chia sẻ"
-                  onPress={shareResult}
-                  style={styles.actionButton}
+                  title="Bắt đầu phân tích"
+                  onPress={analyzeImage}
+                  size="large"
+                  style={styles.analyzeButton}
                 />
               </View>
             </Card>
-          </Animated.View>
-        )}
+          )}
+
+          {/* Loading Section */}
+          {analysisMutation.isPending && (
+            <Card style={styles.loadingCard} padding="large">
+              <View style={styles.loadingContent}>
+                <View style={styles.loadingIcon}>
+                  <Animated.View style={{ transform: [{ rotate: '45deg' }] }}>
+                    <Ionicons name="analytics" size={48} color="#4c6ef5" />
+                  </Animated.View>
+                </View>
+                <Text style={styles.loadingTitle}>Đang phân tích...</Text>
+                <Text style={styles.loadingSubtitle}>
+                  Vui lòng đợi trong khi AI phân tích hình ảnh của bạn
+                </Text>
+                <View style={styles.progressBar}>
+                  <View style={styles.progressIndicator} />
+                </View>
+              </View>
+            </Card>
+          )}
+
+          {/* Results Section */}
+          {analysisResult && (
+            <Animated.View style={{ opacity: fadeAnim }}>
+              <Card style={styles.resultCard} padding="large">
+                <View style={styles.resultHeader}>
+                  <View style={styles.resultIconContainer}>
+                    <Ionicons 
+                      name={getResultIcon(analysisResult.prediction)} 
+                      size={32} 
+                      color={getResultColor(analysisResult.prediction)} 
+                    />
+                  </View>
+                  <View style={styles.resultInfo}>
+                    <Text style={styles.resultLabel}>Kết quả phân tích</Text>
+                    <Text style={[
+                      styles.resultValue,
+                      { color: getResultColor(analysisResult.prediction) }
+                    ]}>
+                      {getResultText(analysisResult.prediction)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.metricsContainer}>
+                  <View style={styles.metric}>
+                    <Text style={styles.metricValue}>
+                      {(analysisResult.confidence * 100).toFixed(1)}%
+                    </Text>
+                    <Text style={styles.metricLabel}>Độ tin cậy</Text>
+                  </View>
+                  
+                  <View style={styles.metricDivider} />
+                  
+                  <View style={styles.metric}>
+                    <Text style={styles.metricValue}>
+                      {analysisResult.processingTime}ms
+                    </Text>
+                    <Text style={styles.metricLabel}>Thời gian xử lý</Text>
+                  </View>
+                </View>
+
+                <View style={styles.disclaimer}>
+                  <Ionicons name="information-circle-outline" size={20} color="#fbbf24" />
+                  <View style={styles.disclaimerText}>
+                    <Text style={styles.disclaimerTitle}>Lưu ý quan trọng</Text>
+                    <Text style={styles.disclaimerContent}>
+                      Kết quả này chỉ mang tính chất tham khảo. Vui lòng tham khảo ý kiến bác sĩ chuyên khoa.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.actionButtons}>
+                  <Button
+                    title="Lưu kết quả"
+                    onPress={saveResult}
+                    variant="outline"
+                    style={styles.actionButton}
+                  />
+                  <Button
+                    title="Chia sẻ"
+                    onPress={shareResult}
+                    style={styles.actionButton}
+                  />
+                </View>
+              </Card>
+            </Animated.View>
+          )}
+        </ScrollView>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -243,6 +260,12 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
@@ -383,7 +406,7 @@ const styles = StyleSheet.create({
   },
   resultCard: {
     marginHorizontal: 20,
-    flex: 1,
+    marginBottom: 24,
   },
   resultHeader: {
     flexDirection: 'row',

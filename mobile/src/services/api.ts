@@ -3,6 +3,7 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AnalysisResult, AnalysisHistory } from '../types/analysis.types';
 
 // API Configuration  
@@ -22,14 +23,18 @@ class ApiService {
       },
     });
 
-    // Request interceptor
+    // Request interceptor - automatically add auth token
     this.client.interceptors.request.use(
-      (config) => {
-        // Add auth token if available
-        // const token = getAuthToken();
-        // if (token) {
-        //   config.headers.Authorization = `Bearer ${token}`;
-        // }
+      async (config) => {
+        try {
+          // Get auth token from storage
+          const token = await AsyncStorage.getItem('access_token');
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        } catch (error) {
+          console.warn('Failed to get auth token:', error);
+        }
         return config;
       },
       (error) => {
@@ -86,7 +91,7 @@ class ApiService {
   }
 
   /**
-   * Get analysis history
+   * Get analysis history (all users - for testing)
    */
   async getAnalysisHistory(
     page: number = 1,
@@ -99,6 +104,24 @@ class ApiService {
     }
 
     const response = await this.client.get('/analysis/history', { params });
+    return response.data;
+  }
+
+  /**
+   * Get analysis history for specific user
+   */
+  async getUserAnalysisHistory(
+    userId: string,
+    page: number = 1,
+    pageSize: number = 10,
+    filterPrediction?: string
+  ): Promise<AnalysisHistory> {
+    const params: any = { page, pageSize };
+    if (filterPrediction) {
+      params.filter_prediction = filterPrediction;
+    }
+
+    const response = await this.client.get(`/analysis/history/${userId}`, { params });
     return response.data;
   }
 

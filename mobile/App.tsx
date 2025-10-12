@@ -5,7 +5,11 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+
+// Import auth
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { LoginScreen } from './src/screens/LoginScreen';
 
 // Import screens
 import NewHomeScreen from './src/screens/NewHomeScreen';
@@ -166,27 +170,78 @@ function MainTabs() {
   );
 }
 
+// Auth Stack Navigator for login flow
+function AuthStack() {
+  const AuthStackNav = createStackNavigator();
+  return (
+    <AuthStackNav.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        cardStyle: { backgroundColor: '#1a1a2e' }
+      }}
+    >
+      <AuthStackNav.Screen name="Login" component={LoginScreen} />
+    </AuthStackNav.Navigator>
+  );
+}
+
+// Loading screen
+function LoadingScreen() {
+  return (
+    <View style={{ 
+      flex: 1, 
+      backgroundColor: '#1a1a2e',
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    }}>
+      <ActivityIndicator size="large" color="#4c6ef5" />
+      <Text style={{ 
+        color: 'white', 
+        fontSize: 16, 
+        marginTop: 16 
+      }}>
+        Đang tải...
+      </Text>
+    </View>
+  );
+}
+
+// App Navigator based on auth state
+function AppNavigator() {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <NavigationContainer
+      theme={{
+        ...DefaultTheme,
+        dark: true,
+        colors: {
+          ...DefaultTheme.colors,
+          primary: '#4c6ef5',
+          background: '#1a1a2e',
+          card: '#2a2a3e',
+          text: '#ffffff',
+          border: 'rgba(255, 255, 255, 0.1)',
+          notification: '#4c6ef5',
+        },
+      }}
+    >
+      {isAuthenticated ? <MainTabs /> : <AuthStack />}
+    </NavigationContainer>
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <NavigationContainer
-          theme={{
-            ...DefaultTheme,
-            dark: true,
-            colors: {
-              ...DefaultTheme.colors,
-              primary: '#4c6ef5',
-              background: '#1a1a2e',
-              card: '#2a2a3e',
-              text: '#ffffff',
-              border: 'rgba(255, 255, 255, 0.1)',
-              notification: '#4c6ef5',
-            },
-          }}
-        >
-          <MainTabs />
-        </NavigationContainer>
+        <AuthProvider>
+          <AppNavigator />
+        </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

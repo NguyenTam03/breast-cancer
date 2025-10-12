@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
 from enum import Enum
+from .user import UserRole, DoctorInfo
 
 
 class Platform(str, Enum):
@@ -90,6 +91,8 @@ class RegisterRequest(BaseModel):
     password: str
     firstName: str
     lastName: str
+    role: UserRole = UserRole.PATIENT  # Default role is patient
+    doctorInfo: Optional[DoctorInfo] = None  # Required if role is doctor
     deviceInfo: DeviceInfo
 
 

@@ -28,7 +28,7 @@ class MLResults(BaseModel):
     """Machine learning prediction results"""
     prediction: PredictionResult
     confidence: float  # 0.0 - 1.0
-    processingTime: int  # in milliseconds
+    processingTime: float  # in seconds (can be decimal)
     modelVersion: str = "gwo-cnn-v1.0"
     features: List[float] = []  # GWO selected features
     rawOutput: float  # Raw model output before threshold

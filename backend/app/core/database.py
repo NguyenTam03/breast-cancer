@@ -73,18 +73,21 @@ async def create_indexes():
     """Create database indexes for performance"""
     try:
         # User indexes
-        await User.find().create_index("email", unique=True)
-        await User.find().create_index("createdAt")
+        user_collection = User.get_motor_collection()
+        await user_collection.create_index("email", unique=True)
+        await user_collection.create_index("createdAt")
         
         # Analysis indexes
-        await Analysis.find().create_index("userId")
-        await Analysis.find().create_index("createdAt")
-        await Analysis.find().create_index([("userId", 1), ("createdAt", -1)])
+        analysis_collection = Analysis.get_motor_collection()
+        await analysis_collection.create_index("userId")
+        await analysis_collection.create_index("createdAt")
+        await analysis_collection.create_index([("userId", 1), ("createdAt", -1)])
         
         # RefreshToken indexes
-        await RefreshToken.find().create_index("userId")
-        await RefreshToken.find().create_index("expiresAt")
-        await RefreshToken.find().create_index("refreshToken", unique=True)
+        refresh_token_collection = RefreshToken.get_motor_collection()
+        await refresh_token_collection.create_index("userId")
+        await refresh_token_collection.create_index("expiresAt")
+        await refresh_token_collection.create_index("refreshToken", unique=True)
         
         logger.info("Database indexes created successfully")
         

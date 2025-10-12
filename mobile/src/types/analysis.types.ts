@@ -10,6 +10,7 @@ export interface AnalysisResult {
   processingTime: number;
   analysisDate: string;
   imageInfo: ImageInfo;
+  imageUrl?: string;  // URL to fetch the image
   userNotes?: string;
   isBookmarked: boolean;
   tags: string[];

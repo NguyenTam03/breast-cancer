@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   StatusBar,
@@ -11,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -19,12 +19,17 @@ import Card from '../components/Card';
 import { colors } from '../theme/colors';
 import { apiService } from '../services/api';
 import { AnalysisResult } from '../types/analysis.types';
+import { useAuth } from '../contexts/AuthContext';
+
+// API Base URL for images
+const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';
 
 interface HistoryScreenProps {
   navigation: any;
 }
 
 export default function HistoryScreen({ navigation }: HistoryScreenProps) {
+  const { user, isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [historyData, setHistoryData] = useState<AnalysisResult[]>([]);
@@ -54,7 +59,14 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
         setLoading(true);
       }
 
-      const response = await apiService.getAnalysisHistory(pageNum, 20);
+      // Check if user is authenticated and has valid ID
+      if (!isAuthenticated || !user?.id) {
+        Alert.alert('Lỗi', 'Vui lòng đăng nhập để xem lịch sử');
+        return;
+      }
+
+      // Use user-specific endpoint
+      const response = await apiService.getUserAnalysisHistory(user.id, pageNum, 20);
       
       if (isRefresh || pageNum === 1) {
         setHistoryData(response.analyses);
@@ -65,8 +77,8 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
       setHasMoreData(response.analyses.length === 20);
       setPage(pageNum);
     } catch (error) {
-      console.error('Failed to load history:', error);
-      Alert.alert('Lỗi', 'Không thể tải lịch sử phân tích');
+      console.error('Failed to load user history:', error);
+      Alert.alert('Lỗi', 'Không thể tải lịch sử phân tích của bạn');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -174,10 +186,18 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
       <TouchableOpacity onPress={() => handleItemPress(item)} activeOpacity={0.8}>
         <View style={styles.itemContent}>
           <View style={styles.itemImage}>
-            {/* Use a placeholder or default image since we don't store image URLs */}
-            <View style={styles.thumbnailPlaceholder}>
-              <Ionicons name="image-outline" size={24} color="#8e8e93" />
-            </View>
+            {item.imageUrl ? (
+              <Image 
+                source={{ uri: `${API_BASE_URL}${item.imageUrl}` }} 
+                style={styles.thumbnail}
+                contentFit="cover"
+                transition={200}
+              />
+            ) : (
+              <View style={styles.thumbnailPlaceholder}>
+                <Ionicons name="image-outline" size={24} color="#8e8e93" />
+              </View>
+            )}
           </View>
           
           <View style={styles.itemInfo}>
@@ -472,6 +492,11 @@ const styles = StyleSheet.create({
   },
   itemImage: {
     marginRight: 16,
+  },
+  thumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
   },
   thumbnailPlaceholder: {
     width: 60,

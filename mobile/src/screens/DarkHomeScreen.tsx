@@ -8,13 +8,13 @@ import {
   Text,
   StyleSheet,
   Alert,
-  SafeAreaView,
   ScrollView,
   Dimensions,
   StatusBar,
   Animated,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';

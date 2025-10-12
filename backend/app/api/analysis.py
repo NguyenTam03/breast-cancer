@@ -9,13 +9,16 @@ import aiofiles
 import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer
 from typing import List, Optional
 from PIL import Image
 from beanie import PydanticObjectId
 
 from app.models.analysis import Analysis, PredictionResult, ImageInfo, MLResults, AnalysisMetadata
+from app.models.user import User
 from app.ml.model_service import predict_breast_cancer, get_predictor
+from app.utils.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +29,8 @@ security = HTTPBearer()
 @router.post("/predict")
 async def analyze_image(
     image: UploadFile = File(...),
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
 ):
     """Analyze uploaded image for breast cancer detection"""
     
@@ -108,7 +112,7 @@ async def analyze_image(
         try:
             # Create Analysis document
             analysis_doc = Analysis(
-                userId=PydanticObjectId("507f1f77bcf86cd799439011"),  # Default user for now
+                userId=current_user.id,  # Use current authenticated user
                 imageInfo=ImageInfo(
                     originalName=image.filename,
                     filePath=file_path,
@@ -150,18 +154,59 @@ async def analyze_image(
         )
 
 
+@router.get("/image/{analysis_id}")
+async def get_analysis_image(analysis_id: str):
+    """Get the image associated with an analysis"""
+    try:
+        # Find analysis by ID
+        analysis = await Analysis.get(PydanticObjectId(analysis_id))
+        
+        if not analysis:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis not found"
+            )
+        
+        # Check if image file exists
+        image_path = analysis.imageInfo.filePath
+        if not image_path or not os.path.exists(image_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Image file not found"
+            )
+        
+        # Return image file
+        return FileResponse(
+            path=image_path,
+            media_type=analysis.imageInfo.mimeType,
+            filename=analysis.imageInfo.originalName
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get analysis image: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve image: {str(e)}"
+        )
+
+
 @router.get("/history")
 async def get_analysis_history(
     page: int = 1,
     pageSize: int = 10,
     filter_prediction: Optional[str] = None
+    # TODO: Re-enable authentication after testing
+    # current_user: User = Depends(get_current_user)
 ):
-    """Get user's analysis history"""
+    """Get user's analysis history - returns all analyses (for testing)"""
     try:
         # Calculate skip for pagination
         skip = (page - 1) * pageSize
         
-        # Build query filter
+        # TODO: Use current_user.id when auth is enabled
+        # For now, get all analyses for testing
         query_filter = {}
         if filter_prediction:
             query_filter["mlResults.prediction"] = filter_prediction.upper()
@@ -191,6 +236,7 @@ async def get_analysis_history(
                     "mimeType": analysis.imageInfo.mimeType,
                     "dimensions": analysis.imageInfo.dimensions
                 },
+                "imageUrl": f"/analysis/image/{str(analysis.id)}",  # Add image URL
                 "userNotes": analysis.userNotes,
                 "isBookmarked": analysis.isBookmarked,
                 "tags": analysis.tags
@@ -209,6 +255,72 @@ async def get_analysis_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve analysis history: {str(e)}"
+        )
+
+
+@router.get("/history/{user_id}")
+async def get_user_analysis_history(
+    user_id: str,
+    page: int = 1,
+    pageSize: int = 10,
+    filter_prediction: Optional[str] = None
+):
+    """Get analysis history for specific user"""
+    try:
+        # Calculate skip for pagination
+        skip = (page - 1) * pageSize
+        
+        # Build query filter for specific user
+        query_filter = {"userId": PydanticObjectId(user_id)}
+        if filter_prediction:
+            query_filter["mlResults.prediction"] = filter_prediction.upper()
+        
+        # Get total count for this user
+        total_count = await Analysis.find(query_filter).count()
+        
+        # Get analyses with pagination for this user
+        analyses = await Analysis.find(query_filter)\
+            .sort("-createdAt")\
+            .skip(skip)\
+            .limit(pageSize)\
+            .to_list()
+        
+        # Format analyses to match mobile app expected structure
+        formatted_analyses = []
+        for analysis in analyses:
+            formatted_analysis = {
+                "id": str(analysis.id),
+                "prediction": analysis.mlResults.prediction,
+                "confidence": analysis.mlResults.confidence,
+                "processingTime": analysis.mlResults.processingTime,
+                "analysisDate": analysis.metadata.analysisDate.isoformat() + "Z",
+                "imageInfo": {
+                    "originalName": analysis.imageInfo.originalName,
+                    "fileSize": analysis.imageInfo.fileSize,
+                    "mimeType": analysis.imageInfo.mimeType,
+                    "dimensions": analysis.imageInfo.dimensions
+                },
+                "imageUrl": f"/analysis/image/{str(analysis.id)}",  # Add image URL
+                "userNotes": analysis.userNotes,
+                "isBookmarked": analysis.isBookmarked,
+                "tags": analysis.tags,
+                "userId": str(analysis.userId)  # Include userId in response
+            }
+            formatted_analyses.append(formatted_analysis)
+        
+        return {
+            "analyses": formatted_analyses,
+            "totalCount": total_count,
+            "page": page,
+            "pageSize": pageSize,
+            "userId": user_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get user analysis history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve user analysis history: {str(e)}"
         )
 
 

@@ -1,7 +1,23 @@
+export enum UserRole {
+  PATIENT = 'patient',
+  DOCTOR = 'doctor'
+}
+
+export interface DoctorInfo {
+  specialization?: string;
+  licenseNumber?: string;
+  hospital?: string;
+  experience?: number;
+  qualifications?: string[];
+  consultationFee?: number;
+}
+
 export interface User {
   id: string;
   email: string;
+  role: UserRole;
   profile: UserProfile;
+  doctorInfo?: DoctorInfo;
   preferences: UserPreferences;
   createdAt: string;
   lastLogin?: string;
@@ -33,6 +49,8 @@ export interface RegisterRequest {
   password: string;
   firstName: string;
   lastName: string;
+  role?: UserRole;
+  doctorInfo?: DoctorInfo;
   deviceInfo: DeviceInfo;
 }
 
