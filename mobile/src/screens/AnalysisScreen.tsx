@@ -219,10 +219,7 @@ export default function AnalysisScreen({ route, navigation }: any) {
                 <View style={styles.metricsContainer}>
                   <View style={styles.metric}>
                     <Text style={styles.metricValue}>
-                      {analysisResult.confidence_percentage 
-                        ? `${analysisResult.confidence_percentage}%`
-                        : `${(analysisResult.confidence * 100).toFixed(4)}%`
-                      }
+                      {(analysisResult.confidence * 100).toFixed(1)}%
                     </Text>
                     <Text style={styles.metricLabel}>Độ tin cậy</Text>
                   </View>

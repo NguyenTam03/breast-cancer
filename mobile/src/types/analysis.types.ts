@@ -7,7 +7,6 @@ export interface AnalysisResult {
   id: string;
   prediction: 'BENIGN' | 'MALIGNANT';
   confidence: number;
-  confidence_percentage?: number;  // Confidence as percentage with high precision
   processingTime: number;
   analysisDate: string;
   imageInfo: ImageInfo;
