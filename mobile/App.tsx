@@ -68,35 +68,6 @@ function HistoryStack() {
   );
 }
 
-// Appointment placeholder screen
-function AppointmentScreen() {
-  return (
-    <View style={{ 
-      flex: 1, 
-      backgroundColor: '#1a1a2e',
-      justifyContent: 'center', 
-      alignItems: 'center' 
-    }}>
-      <Ionicons name="calendar-outline" size={48} color="#8e8e93" />
-      <Text style={{ 
-        color: 'white', 
-        fontSize: 18, 
-        fontWeight: 'bold', 
-        marginTop: 16,
-        marginBottom: 8
-      }}>
-        Lịch hẹn
-      </Text>
-      <Text style={{ 
-        color: '#8e8e93', 
-        fontSize: 14, 
-        textAlign: 'center' 
-      }}>
-        Chức năng đang phát triển
-      </Text>
-    </View>
-  );
-}
 
 // Main Tab Navigator
 function MainTabs() {
@@ -126,8 +97,6 @@ function MainTabs() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'HistoryTab') {
             iconName = focused ? 'analytics' : 'analytics-outline';
-          } else if (route.name === 'AppointmentTab') {
-            iconName = focused ? 'calendar' : 'calendar-outline';
           } else if (route.name === 'SettingsTab') {
             iconName = focused ? 'settings' : 'settings-outline';
           } else {
@@ -150,13 +119,6 @@ function MainTabs() {
         component={HistoryStack}
         options={{
           tabBarLabel: 'Phân tích',
-        }}
-      />
-      <Tab.Screen 
-        name="AppointmentTab" 
-        component={AppointmentScreen}
-        options={{
-          tabBarLabel: 'Lịch hẹn',
         }}
       />
       <Tab.Screen 

@@ -230,11 +230,11 @@ export default function NewHomeScreen({ navigation }: any) {
               />
               
               <FeatureCard
-                title="Đặt lịch tái khám"
-                subtitle="Đặt lịch hẹn với bác sĩ."
-                icon="calendar"
-                gradient={['#ffa726', '#ff9800']}
-                onPress={() => navigation.navigate('AppointmentTab')}
+                title="Cài đặt"
+                subtitle="Quản lý tài khoản và cài đặt ứng dụng."
+                icon="settings"
+                gradient={['#26de81', '#20bf6b']}
+                onPress={() => navigation.navigate('SettingsTab')}
               />
             </View>
           </View>
@@ -416,6 +416,7 @@ const styles = StyleSheet.create({
   featureGradient: {
     padding: 20,
     minHeight: 120,
+    borderRadius: 16,
   },
   featureContent: {
     flex: 1,

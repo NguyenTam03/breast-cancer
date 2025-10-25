@@ -18,6 +18,7 @@ from beanie import PydanticObjectId
 from app.models.analysis import Analysis, PredictionResult, ImageInfo, MLResults, AnalysisMetadata
 from app.models.user import User
 from app.ml.model_service import predict_breast_cancer, get_predictor
+from app.ml.feature_service import feature_service
 from app.utils.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,9 @@ async def analyze_image(
         async with aiofiles.open(file_path, 'wb') as f:
             await f.write(image_data)
         
+        # Get GWO selected features info
+        gwo_features = feature_service.get_gwo_selected_features("svm")  # Using SVM as default
+        
         # Prepare response
         analysis_result = {
             "id": analysis_id,
@@ -105,7 +109,15 @@ async def analyze_image(
             "userNotes": notes,
             "isBookmarked": False,
             "tags": [],
-            "rawScore": prediction_result.get("raw_score", 0)
+            "rawScore": prediction_result.get("raw_score", 0),
+            "featureSelection": {
+                "algorithm": gwo_features["algorithm"],
+                "modelType": gwo_features["modelType"],
+                "selectedFeatures": gwo_features["features"],
+                "totalFeatures": gwo_features["totalFeatures"],
+                "selectedCount": gwo_features["selectedCount"],
+                "selectionRatio": gwo_features["selectionRatio"]
+            }
         }
         
         # Save analysis results to database
@@ -221,6 +233,9 @@ async def get_analysis_history(
             .limit(pageSize)\
             .to_list()
         
+        # Get GWO features info to include in history
+        gwo_features = feature_service.get_gwo_selected_features("svm")
+        
         # Format analyses to match mobile app expected structure
         formatted_analyses = []
         for analysis in analyses:
@@ -239,7 +254,15 @@ async def get_analysis_history(
                 "imageUrl": f"/analysis/image/{str(analysis.id)}",  # Add image URL
                 "userNotes": analysis.userNotes,
                 "isBookmarked": analysis.isBookmarked,
-                "tags": analysis.tags
+                "tags": analysis.tags,
+                "featureSelection": {
+                    "algorithm": gwo_features["algorithm"],
+                    "modelType": gwo_features["modelType"],
+                    "selectedFeatures": gwo_features["features"],
+                    "totalFeatures": gwo_features["totalFeatures"],
+                    "selectedCount": gwo_features["selectedCount"],
+                    "selectionRatio": gwo_features["selectionRatio"]
+                }
             }
             formatted_analyses.append(formatted_analysis)
         
@@ -285,6 +308,9 @@ async def get_user_analysis_history(
             .limit(pageSize)\
             .to_list()
         
+        # Get GWO features info to include in history
+        gwo_features = feature_service.get_gwo_selected_features("svm")
+        
         # Format analyses to match mobile app expected structure
         formatted_analyses = []
         for analysis in analyses:
@@ -304,7 +330,15 @@ async def get_user_analysis_history(
                 "userNotes": analysis.userNotes,
                 "isBookmarked": analysis.isBookmarked,
                 "tags": analysis.tags,
-                "userId": str(analysis.userId)  # Include userId in response
+                "userId": str(analysis.userId),  # Include userId in response
+                "featureSelection": {
+                    "algorithm": gwo_features["algorithm"],
+                    "modelType": gwo_features["modelType"],
+                    "selectedFeatures": gwo_features["features"],
+                    "totalFeatures": gwo_features["totalFeatures"],
+                    "selectedCount": gwo_features["selectedCount"],
+                    "selectionRatio": gwo_features["selectionRatio"]
+                }
             }
             formatted_analyses.append(formatted_analysis)
         
@@ -406,3 +440,86 @@ async def toggle_bookmark(analysis_id: str):
         "message": "Bookmark toggled successfully",
         "isBookmarked": True
     }
+
+
+@router.get("/features/gwo/{model_type}")
+async def get_gwo_selected_features(model_type: str):
+    """Get features selected by Grey Wolf Optimizer for specific model type"""
+    try:
+        if model_type.lower() not in ["rf", "svm"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Model type must be 'rf' or 'svm'"
+            )
+        
+        feature_info = feature_service.get_gwo_selected_features(model_type)
+        
+        return {
+            "success": True,
+            "data": feature_info
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get GWO selected features: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve features: {str(e)}"
+        )
+
+
+@router.get("/features/comparison")
+async def get_feature_comparison():
+    """Compare features selected by GWO for RF vs SVM models"""
+    try:
+        comparison_data = feature_service.get_feature_comparison()
+        
+        return {
+            "success": True,
+            "data": comparison_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get feature comparison: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve feature comparison: {str(e)}"
+        )
+
+
+@router.get("/features/info")
+async def get_features_info():
+    """Get general information about feature selection"""
+    try:
+        return {
+            "success": True,
+            "data": {
+                "algorithm": "Grey Wolf Optimizer (GWO)",
+                "description": "GWO là thuật toán meta-heuristic được sử dụng để chọn lọc features quan trọng nhất cho việc chẩn đoán ung thư vú",
+                "totalFeatures": 30,
+                "datasetInfo": {
+                    "name": "Wisconsin Breast Cancer Dataset", 
+                    "features": [
+                        "Bán kính (radius)", "Kết cấu (texture)", "Chu vi (perimeter)",
+                        "Diện tích (area)", "Độ mượt (smoothness)", "Độ nén (compactness)",
+                        "Độ lõm (concavity)", "Điểm lõm (concave points)", 
+                        "Đối xứng (symmetry)", "Chiều fractal (fractal dimension)"
+                    ],
+                    "measurements": ["Mean", "Standard Error", "Worst"]
+                },
+                "benefits": [
+                    "Giảm độ phức tạp tính toán",
+                    "Loại bỏ các features không quan trọng", 
+                    "Cải thiện độ chính xác của model",
+                    "Giảm overfitting"
+                ]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get features info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve features info: {str(e)}"
+        )

@@ -7,6 +7,7 @@ export interface AnalysisResult {
   id: string;
   prediction: 'BENIGN' | 'MALIGNANT';
   confidence: number;
+  confidence_percentage?: number;  // Confidence as percentage with high precision
   processingTime: number;
   analysisDate: string;
   imageInfo: ImageInfo;
@@ -14,6 +15,7 @@ export interface AnalysisResult {
   userNotes?: string;
   isBookmarked: boolean;
   tags: string[];
+  featureSelection?: FeatureSelection;
 }
 
 export interface ImageInfo {
@@ -40,4 +42,29 @@ export interface AnalysisHistory {
   totalCount: number;
   page: number;
   pageSize: number;
+}
+
+export interface FeatureInfo {
+  name: string;
+  displayName: string;
+  category: string;
+  importance: number;
+}
+
+export interface FeatureSelection {
+  algorithm: string;
+  modelType: string;
+  selectedFeatures: FeatureInfo[];
+  totalFeatures: number;
+  selectedCount: number;
+  selectionRatio: number;
+}
+
+export interface FeatureComparison {
+  commonFeatures: FeatureInfo[];
+  rfOnlyFeatures: FeatureInfo[];
+  svmOnlyFeatures: FeatureInfo[];
+  totalCommon: number;
+  rfTotal: number;
+  svmTotal: number;
 }

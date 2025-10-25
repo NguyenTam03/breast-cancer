@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class BreastCancerPredictor:
-    def __init__(self, model_path: str = "models\model_gwo_selected_feature.h5"):
+    def __init__(self, model_path: str = "models/model_gwo_selected_feature.h5"):
         """
         Initialize the breast cancer predictor with the trained CNN model
         
@@ -130,9 +130,10 @@ class BreastCancerPredictor:
             
             return {
                 "prediction": predicted_class,
-                "confidence": round(final_confidence, 3),
+                "confidence": round(final_confidence, 6),  # Tăng độ chính xác
                 "processing_time": processing_time,
-                "raw_score": round(confidence, 3)
+                "raw_score": round(confidence, 6),  # Giữ nguyên raw score chi tiết
+                "confidence_percentage": round(final_confidence * 100, 4)  # Thêm phần trăm chi tiết
             }
             
         except Exception as e:
@@ -324,9 +325,10 @@ class GWOPredictor:
 
             return {
                 "prediction": predicted_class,
-                "confidence": round(final_confidence, 3),
+                "confidence": round(final_confidence, 6),  # Tăng độ chính xác
                 "processing_time": processing_time,
-                "raw_score": round(prob, 3)
+                "raw_score": round(prob, 6),  # Giữ nguyên raw score chi tiết
+                "confidence_percentage": round(final_confidence * 100, 4)  # Thêm phần trăm chi tiết
             }
         except Exception as e:
             logger.error(f"Error during GWO prediction: {e}")
