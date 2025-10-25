@@ -16,12 +16,14 @@ import NewHomeScreen from './src/screens/NewHomeScreen';
 import AnalysisScreen from './src/screens/AnalysisScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import FeatureInputScreen from './src/screens/FeatureInputScreen';
 
 // Define navigation types
 export type RootStackParamList = {
   Home: undefined;
-  Analysis: { imageUri: string };
+  Analysis: { imageUri?: string; analysisResult?: any; isFromHistory?: boolean; isFromFeatures?: boolean };
   HistoryMain: undefined;
+  FeatureInputScreen: undefined;
 };
 
 // Create navigators
@@ -49,6 +51,7 @@ function HomeStack() {
     >
       <Stack.Screen name="Home" component={NewHomeScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
+      <Stack.Screen name="FeatureInputScreen" component={FeatureInputScreen} />
     </Stack.Navigator>
   );
 }
@@ -68,6 +71,20 @@ function HistoryStack() {
   );
 }
 
+// Features Stack Navigator
+function FeaturesStack() {
+  return (
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false,
+        cardStyle: { backgroundColor: '#1a1a2e' }
+      }}
+    >
+      <Stack.Screen name="FeatureInputMain" component={FeatureInputScreen} />
+      <Stack.Screen name="Analysis" component={AnalysisScreen} />
+    </Stack.Navigator>
+  );
+}
 
 // Main Tab Navigator
 function MainTabs() {
@@ -97,6 +114,8 @@ function MainTabs() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'HistoryTab') {
             iconName = focused ? 'analytics' : 'analytics-outline';
+          } else if (route.name === 'FeaturesTab') {
+            iconName = focused ? 'calculator' : 'calculator-outline';
           } else if (route.name === 'SettingsTab') {
             iconName = focused ? 'settings' : 'settings-outline';
           } else {
@@ -118,7 +137,14 @@ function MainTabs() {
         name="HistoryTab" 
         component={HistoryStack}
         options={{
-          tabBarLabel: 'Phân tích',
+          tabBarLabel: 'Lịch sử',
+        }}
+      />
+      <Tab.Screen 
+        name="FeaturesTab" 
+        component={FeaturesStack}
+        options={{
+          tabBarLabel: 'Features',
         }}
       />
       <Tab.Screen 

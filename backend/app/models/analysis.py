@@ -34,16 +34,25 @@ class MLResults(BaseModel):
     rawOutput: float  # Raw model output before threshold
 
 
+class FeatureData(BaseModel):
+    """Manual feature input data"""
+    inputFeatures: dict  # Dictionary of feature names and values
+    useGWO: bool = True
+    method: str = "GWO-SVM"
+    featuresUsed: int = 7
+
+
 class AnalysisMetadata(BaseModel):
     """Analysis metadata"""
     analysisDate: datetime = datetime.utcnow()
     deviceInfo: Optional[str] = None
     appVersion: str
     apiVersion: str = "v1.0"
+    analysisType: str = "image"  # "image" or "features"
 
 
 class Analysis(Document):
-    """Analysis document model"""
+    """Analysis document model for image-based analysis"""
     userId: PydanticObjectId
     imageInfo: ImageInfo
     mlResults: MLResults
@@ -59,6 +68,61 @@ class Analysis(Document):
         
     def __repr__(self) -> str:
         return f"<Analysis {self.id} - {self.mlResults.prediction}>"
+    
+    @property
+    def confidence_percentage(self) -> float:
+        """Get confidence as percentage"""
+        return self.mlResults.confidence * 100
+    
+    @property
+    def is_high_confidence(self) -> bool:
+        """Check if prediction has high confidence (>80%)"""
+        return self.mlResults.confidence > 0.8
+    
+    async def add_note(self, note: str):
+        """Add or update user note"""
+        self.userNotes = note
+        self.updatedAt = datetime.utcnow()
+        await self.save()
+    
+    async def toggle_bookmark(self):
+        """Toggle bookmark status"""
+        self.isBookmarked = not self.isBookmarked
+        self.updatedAt = datetime.utcnow()
+        await self.save()
+    
+    async def add_tag(self, tag: str):
+        """Add a tag to the analysis"""
+        if tag not in self.tags:
+            self.tags.append(tag)
+            self.updatedAt = datetime.utcnow()
+            await self.save()
+    
+    async def remove_tag(self, tag: str):
+        """Remove a tag from the analysis"""
+        if tag in self.tags:
+            self.tags.remove(tag)
+            self.updatedAt = datetime.utcnow()
+            await self.save()
+
+
+class FeatureAnalysis(Document):
+    """Analysis document model for feature-based analysis"""
+    userId: PydanticObjectId
+    featureData: FeatureData
+    mlResults: MLResults
+    metadata: AnalysisMetadata
+    userNotes: Optional[str] = None
+    isBookmarked: bool = False
+    tags: List[str] = []
+    createdAt: datetime = datetime.utcnow()
+    updatedAt: datetime = datetime.utcnow()
+    
+    class Settings:
+        name = "feature_analyses"
+        
+    def __repr__(self) -> str:
+        return f"<FeatureAnalysis {self.id} - {self.mlResults.prediction}>"
     
     @property
     def confidence_percentage(self) -> float:
