@@ -9,7 +9,7 @@ import logging
 
 from app.core.config import settings
 from app.models.user import User
-from app.models.analysis import Analysis, FeatureAnalysis
+from app.models.analysis import Analysis
 from app.models.auth import RefreshToken
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,6 @@ async def init_database():
             document_models=[
                 User,
                 Analysis,
-                FeatureAnalysis,
                 RefreshToken
             ]
         )
@@ -83,12 +82,6 @@ async def create_indexes():
         await analysis_collection.create_index("userId")
         await analysis_collection.create_index("createdAt")
         await analysis_collection.create_index([("userId", 1), ("createdAt", -1)])
-        
-        # FeatureAnalysis indexes
-        feature_analysis_collection = FeatureAnalysis.get_motor_collection()
-        await feature_analysis_collection.create_index("userId")
-        await feature_analysis_collection.create_index("createdAt")
-        await feature_analysis_collection.create_index([("userId", 1), ("createdAt", -1)])
         
         # RefreshToken indexes
         refresh_token_collection = RefreshToken.get_motor_collection()

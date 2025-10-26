@@ -3,29 +3,28 @@ export interface AnalysisRequest {
   notes?: string;
 }
 
-export interface FeatureAnalysisRequest {
-  featureData: Record<string, number>;
-  useGWO?: boolean;
-  notes?: string;
-}
-
 export interface AnalysisResult {
   id: string;
   prediction: 'BENIGN' | 'MALIGNANT';
   confidence: number;
   processingTime: number;
   analysisDate: string;
-  imageInfo?: ImageInfo;
+  imageInfo: ImageInfo;
   imageUrl?: string;  // URL to fetch the image
   userNotes?: string;
   isBookmarked: boolean;
   tags: string[];
-  // New fields for feature analysis
-  method?: string;
-  featuresUsed?: number;
-  inputFeatures?: Record<string, number>;
-  useGWO?: boolean;
-  analysisType?: 'image' | 'features';
+  analysisType?: 'image' | 'features';  // Type of analysis
+  featuresInfo?: {  // Information about features used (for feature-based analysis)
+    featureCount: number;
+    selectedFeatures: Array<{
+      index: number;
+      name: string;
+      description: string;
+      display_order: number;
+    }>;
+    featureValues: number[];
+  };
 }
 
 export interface ImageInfo {
@@ -45,48 +44,6 @@ export interface MLResults {
   modelVersion: string;
   features: number[];
   rawOutput: number;
-}
-
-export interface FeatureInfo {
-  name: string;
-  description: string;
-  default_value: number;
-  is_required: boolean;
-}
-
-export interface FeaturesInfoResponse {
-  success: boolean;
-  features: FeatureInfo[];
-  totalFeatures: number;
-  description: string;
-}
-
-export interface ComparisonResult {
-  success: boolean;
-  analysisDate: string;
-  results: {
-    image_prediction?: {
-      prediction: 'BENIGN' | 'MALIGNANT';
-      confidence: number;
-      processing_time: number;
-      method: string;
-      error?: string;
-    };
-    feature_prediction?: {
-      prediction: 'BENIGN' | 'MALIGNANT';
-      confidence: number;
-      processing_time: number;
-      method: string;
-      features_used: number;
-      error?: string;
-    };
-    comparison?: {
-      agreement: boolean;
-      confidence_difference: number;
-      average_confidence: number;
-    };
-  };
-  notes?: string;
 }
 
 export interface AnalysisHistory {

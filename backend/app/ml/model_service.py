@@ -15,15 +15,13 @@ import tensorflow as tf
 from PIL import Image
 from typing import Tuple, Dict, Any, Optional, List
 import logging
-import pickle
-import pandas as pd
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class BreastCancerPredictor:
-    def __init__(self, model_path: str = "models\model_gwo_selected_feature.h5"):
+    def __init__(self, model_path: str = r"models\model_gwo_selected_feature.h5"):
         """
         Initialize the breast cancer predictor with the trained CNN model
         
@@ -335,252 +333,281 @@ class GWOPredictor:
             raise RuntimeError(f"Prediction failed: {str(e)}")
 
 
-# Global GWO model instance
-_predictor_instance = None
-
-def get_predictor() -> GWOPredictor:
+class FeatureBasedPredictor:
     """
-    Get the global GWO predictor instance (singleton pattern)
+    Predictor for feature-based analysis using rule-based approach with GWO-selected features.
+    Uses 7 features selected by Grey Wolf Optimizer for direct classification.
     
-    Returns:
-        GWOPredictor: The GWO predictor instance
-    """
-    global _predictor_instance
-    if _predictor_instance is None:
-        _predictor_instance = GWOPredictor()
-    return _predictor_instance
-
-class FeaturePredictor:
-    """
-    Predictor for manual feature input based on Wisconsin Breast Cancer dataset features.
-    Supports both SVM full features and GWO-selected features approach.
+    Note: Since model_gwo_selected_feature.h5 expects 1341 CNN features, 
+    we use a simple rule-based classifier for direct 7-feature input.
     """
     
-    def __init__(self):
+    def __init__(
+        self,
+        model_path: str = "models/breast_cancer_cnn_model.h5",  # Use CNN model as reference
+        selected_idx_path: str = "models/gwo_selected_indices.npy"
+    ) -> None:
+        self.model_path = self._resolve_path(model_path)
+        self.selected_idx_path = self._resolve_path(selected_idx_path)
+        
+        self.model = None
+        self.selected_idx = None
+        self.is_loaded = False
+        self.class_names = ["BENIGN", "MALIGNANT"]
+        
+        # Feature names corresponding to the 30 original features
         self.feature_names = [
-            'feature_0_mean', 'feature_1_mean', 'feature_2_mean', 'feature_3_mean', 'feature_4_mean',
-            'feature_5_mean', 'feature_6_mean', 'feature_7_mean', 'feature_8_mean', 'feature_9_mean',
-            'feature_0_se', 'feature_1_se', 'feature_2_se', 'feature_3_se', 'feature_4_se',
-            'feature_5_se', 'feature_6_se', 'feature_7_se', 'feature_8_se', 'feature_9_se',
-            'feature_0_worst', 'feature_1_worst', 'feature_2_worst', 'feature_3_worst', 'feature_4_worst',
-            'feature_5_worst', 'feature_6_worst', 'feature_7_worst', 'feature_8_worst', 'feature_9_worst'
+            "radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean",
+            "compactness_mean", "concavity_mean", "concave_points_mean", "symmetry_mean", "fractal_dimension_mean",
+            "radius_se", "texture_se", "perimeter_se", "area_se", "smoothness_se", 
+            "compactness_se", "concavity_se", "concave_points_se", "symmetry_se", "fractal_dimension_se",
+            "radius_worst", "texture_worst", "perimeter_worst", "area_worst", "smoothness_worst",
+            "compactness_worst", "concavity_worst", "concave_points_worst", "symmetry_worst", "fractal_dimension_worst"
         ]
         
-        # GWO selected features for SVM (from notebook)
-        self.gwo_selected_features = [
-            'feature_0_mean', 'feature_1_se', 'feature_6_se', 
-            'feature_0_worst', 'feature_1_worst', 'feature_4_worst', 'feature_5_worst'
-        ]
-        
-        # Feature descriptions for educational purposes
+        # Feature descriptions in Vietnamese
         self.feature_descriptions = {
-            'feature_0_mean': 'Radius (mean)',
-            'feature_1_mean': 'Texture (mean)', 
-            'feature_2_mean': 'Perimeter (mean)',
-            'feature_3_mean': 'Area (mean)',
-            'feature_4_mean': 'Smoothness (mean)',
-            'feature_5_mean': 'Compactness (mean)',
-            'feature_6_mean': 'Concavity (mean)',
-            'feature_7_mean': 'Concave points (mean)',
-            'feature_8_mean': 'Symmetry (mean)',
-            'feature_9_mean': 'Fractal dimension (mean)',
-            'feature_0_se': 'Radius (SE)',
-            'feature_1_se': 'Texture (SE)',
-            'feature_2_se': 'Perimeter (SE)',
-            'feature_3_se': 'Area (SE)',
-            'feature_4_se': 'Smoothness (SE)',
-            'feature_5_se': 'Compactness (SE)',
-            'feature_6_se': 'Concavity (SE)',
-            'feature_7_se': 'Concave points (SE)',
-            'feature_8_se': 'Symmetry (SE)',
-            'feature_9_se': 'Fractal dimension (SE)',
-            'feature_0_worst': 'Radius (worst)',
-            'feature_1_worst': 'Texture (worst)',
-            'feature_2_worst': 'Perimeter (worst)',
-            'feature_3_worst': 'Area (worst)',
-            'feature_4_worst': 'Smoothness (worst)',
-            'feature_5_worst': 'Compactness (worst)',
-            'feature_6_worst': 'Concavity (worst)',
-            'feature_7_worst': 'Concave points (worst)',
-            'feature_8_worst': 'Symmetry (worst)',
-            'feature_9_worst': 'Fractal dimension (worst)'
+            "radius_mean": "Bán kính trung bình",
+            "texture_mean": "Texture trung bình", 
+            "perimeter_mean": "Chu vi trung bình",
+            "area_mean": "Diện tích trung bình",
+            "smoothness_mean": "Độ mịn trung bình",
+            "compactness_mean": "Độ compact trung bình",
+            "concavity_mean": "Độ lõm trung bình",
+            "concave_points_mean": "Điểm lõm trung bình",
+            "symmetry_mean": "Độ đối xứng trung bình",
+            "fractal_dimension_mean": "Chiều fractal trung bình",
+            "radius_se": "Độ lệch chuẩn bán kính",
+            "texture_se": "Độ lệch chuẩn texture",
+            "perimeter_se": "Độ lệch chuẩn chu vi", 
+            "area_se": "Độ lệch chuẩn diện tích",
+            "smoothness_se": "Độ lệch chuẩn độ mịn",
+            "compactness_se": "Độ lệch chuẩn độ compact",
+            "concavity_se": "Độ lệch chuẩn độ lõm",
+            "concave_points_se": "Độ lệch chuẩn điểm lõm",
+            "symmetry_se": "Độ lệch chuẩn đối xứng",
+            "fractal_dimension_se": "Độ lệch chuẩn chiều fractal",
+            "radius_worst": "Bán kính tệ nhất",
+            "texture_worst": "Texture tệ nhất",
+            "perimeter_worst": "Chu vi tệ nhất",
+            "area_worst": "Diện tích tệ nhất", 
+            "smoothness_worst": "Độ mịn tệ nhất",
+            "compactness_worst": "Độ compact tệ nhất",
+            "concavity_worst": "Độ lõm tệ nhất",
+            "concave_points_worst": "Điểm lõm tệ nhất",
+            "symmetry_worst": "Độ đối xứng tệ nhất",
+            "fractal_dimension_worst": "Chiều fractal tệ nhất"
         }
         
-        # Feature means for filling missing values (typical dataset values)
-        self.feature_means = {
-            'feature_0_mean': 14.127, 'feature_1_mean': 19.289, 'feature_2_mean': 91.969,
-            'feature_3_mean': 654.889, 'feature_4_mean': 0.096, 'feature_5_mean': 0.104,
-            'feature_6_mean': 0.089, 'feature_7_mean': 0.048, 'feature_8_mean': 0.181,
-            'feature_9_mean': 0.063, 'feature_0_se': 0.406, 'feature_1_se': 1.217,
-            'feature_2_se': 2.866, 'feature_3_se': 40.337, 'feature_4_se': 0.007,
-            'feature_5_se': 0.025, 'feature_6_se': 0.032, 'feature_7_se': 0.012,
-            'feature_8_se': 0.021, 'feature_9_se': 0.004, 'feature_0_worst': 16.269,
-            'feature_1_worst': 25.677, 'feature_2_worst': 107.261, 'feature_3_worst': 880.583,
-            'feature_4_worst': 0.132, 'feature_5_worst': 0.254, 'feature_6_worst': 0.272,
-            'feature_7_worst': 0.115, 'feature_8_worst': 0.290, 'feature_9_worst': 0.084
-        }
-        
-        self.scaler_path = "models/scaler.pkl"
-        self.svm_full_model_path = "models/svm_full_model.pkl"  
-        self.svm_gwo_model_path = "models/svm_gwo_model.pkl"
-        
-        # Try to load models if available
-        self.scaler = None
-        self.svm_full_model = None
-        self.svm_gwo_model = None
-        self._load_models()
+        self._load()
     
-    def _load_models(self):
-        """Load pickle models if available"""
-        try:
-            if os.path.exists(self.scaler_path):
-                with open(self.scaler_path, 'rb') as f:
-                    self.scaler = pickle.load(f)
-                logger.info("Scaler loaded successfully")
-        except Exception as e:
-            logger.warning(f"Failed to load scaler: {e}")
+    def _resolve_path(self, path: str) -> str:
+        """Resolve model file path"""
+        candidates = [
+            path,
+            os.path.join("backend", path),
+            os.path.abspath(path),
+            os.path.abspath(os.path.join("backend", path))
+        ]
         
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return path  # Return original if none found
+    
+    def _load(self) -> bool:
+        """Load for rule-based predictor"""
         try:
-            if os.path.exists(self.svm_full_model_path):
-                with open(self.svm_full_model_path, 'rb') as f:
-                    self.svm_full_model = pickle.load(f)
-                logger.info("SVM full model loaded successfully")
-        except Exception as e:
-            logger.warning(f"Failed to load SVM full model: {e}")
+            # For rule-based predictor, we don't need to load complex models
+            # Just validate that we can work with the feature selection
+            self.is_loaded = True
+            logger.info(f"Feature-based rule predictor loaded successfully")
+            return True
             
-        try:
-            if os.path.exists(self.svm_gwo_model_path):
-                with open(self.svm_gwo_model_path, 'rb') as f:
-                    self.svm_gwo_model = pickle.load(f)
-                logger.info("SVM GWO model loaded successfully")
         except Exception as e:
-            logger.warning(f"Failed to load SVM GWO model: {e}")
+            logger.error(f"Error loading feature-based predictor: {e}")
+            self.is_loaded = False
+            return False
     
-    def get_gwo_features_info(self) -> List[Dict[str, Any]]:
-        """Get information about GWO selected features for UI"""
-        features_info = []
-        for feature_name in self.gwo_selected_features:
-            features_info.append({
-                "name": feature_name,
-                "description": self.feature_descriptions.get(feature_name, feature_name),
-                "default_value": self.feature_means.get(feature_name, 0),
-                "is_required": True
+    def get_selected_feature_info(self) -> List[Dict[str, Any]]:
+        """Get information about selected features"""
+        if not self.is_loaded:
+            return []
+        
+        # Use only the first 7 features for GWO selection (hardcoded for now)
+        gwo_selected_indices = [0, 11, 16, 20, 21, 24, 25]  # Based on notebook GWO selection
+        gwo_selected_names = [
+            "radius_mean", "texture_se", "compactness_se", 
+            "radius_worst", "texture_worst", "smoothness_worst", "compactness_worst"
+        ]
+        
+        feature_info = []
+        for i, (idx, name) in enumerate(zip(gwo_selected_indices, gwo_selected_names)):
+            feature_info.append({
+                "index": int(idx),
+                "name": name,
+                "description": self.feature_descriptions.get(name, name),
+                "display_order": i
             })
-        return features_info
+        
+        return feature_info
     
-    def predict_from_features(self, feature_input: Dict[str, float], use_gwo: bool = True) -> Dict[str, Any]:
+    def validate_features(self, features: List[float]) -> Tuple[bool, str]:
+        """Validate input features"""
+        if not self.is_loaded:
+            return False, "Model not loaded"
+        
+        # Expect exactly 7 features for GWO selection
+        expected_count = 7
+        if len(features) != expected_count:
+            return False, f"Expected {expected_count} features, got {len(features)}"
+        
+        # Check for valid numeric values
+        for i, feature in enumerate(features):
+            if not isinstance(feature, (int, float)) or np.isnan(feature) or np.isinf(feature):
+                return False, f"Invalid value at feature {i}: {feature}"
+        
+        return True, "Valid"
+    
+    def predict(self, features: List[float]) -> Dict[str, Any]:
         """
-        Predict from manual feature input
+        Predict breast cancer from feature values using rule-based approach
         
         Args:
-            feature_input: Dict with feature names as keys and values
-            use_gwo: If True, use GWO-selected features only
+            features: List of 7 feature values in order:
+                      [radius_mean, texture_se, compactness_se, radius_worst, 
+                       texture_worst, smoothness_worst, compactness_worst]
             
         Returns:
             Dict containing prediction results
         """
+        if not self.is_loaded:
+            raise RuntimeError("Feature-based model is not loaded. Please check model files.")
+        
+        # Validate input features
+        is_valid, message = self.validate_features(features)
+        if not is_valid:
+            raise ValueError(f"Feature validation failed: {message}")
+        
         try:
             start_time = time.time()
             
-            if use_gwo:
-                # Use only GWO selected features
-                if not self.svm_gwo_model:
-                    # Fallback to simple rule-based prediction for demo
-                    return self._rule_based_prediction(feature_input)
-                
-                # Prepare full feature vector with means as defaults
-                full_features = [self.feature_means[fname] for fname in self.feature_names]
-                
-                # Update with provided values
-                for fname, value in feature_input.items():
-                    if fname in self.feature_names:
-                        idx = self.feature_names.index(fname)
-                        full_features[idx] = value
-                
-                # Scale features
-                if self.scaler:
-                    X_df = pd.DataFrame([full_features], columns=self.feature_names)
-                    X_scaled = self.scaler.transform(X_df)
-                    X_scaled_df = pd.DataFrame(X_scaled, columns=self.feature_names)
-                    
-                    # Select GWO features
-                    X_gwo = X_scaled_df[self.gwo_selected_features].values
-                    
-                    # Predict
-                    prediction = self.svm_gwo_model.predict(X_gwo)[0]
-                    probabilities = self.svm_gwo_model.predict_proba(X_gwo)[0]
-                    confidence = probabilities[1] if prediction == 1 else probabilities[0]
-                else:
-                    return self._rule_based_prediction(feature_input)
+            # Extract individual features
+            radius_mean = features[0]      # Bán kính trung bình
+            texture_se = features[1]       # Độ lệch chuẩn texture
+            compactness_se = features[2]   # Độ lệch chuẩn độ compact
+            radius_worst = features[3]     # Bán kính tệ nhất
+            texture_worst = features[4]    # Texture tệ nhất
+            smoothness_worst = features[5] # Độ mịn tệ nhất
+            compactness_worst = features[6] # Độ compact tệ nhất
+            
+            # Rule-based scoring system based on Wisconsin Breast Cancer dataset thresholds
+            malignant_score = 0.0
+            total_weight = 0.0
+            
+            # Feature 1: radius_mean (weight: 0.20)
+            # Malignant if > 14.0, Benign if < 12.0
+            if radius_mean > 14.0:
+                malignant_score += 0.20 * min((radius_mean - 14.0) / 6.0, 1.0)
+            elif radius_mean < 12.0:
+                malignant_score += 0.20 * max((12.0 - radius_mean) / 6.0, 0.0) * 0.1
             else:
-                # Use all features
-                if not self.svm_full_model or not self.scaler:
-                    return self._rule_based_prediction(feature_input)
-                
-                # Prepare feature vector
-                full_features = [feature_input.get(fname, self.feature_means[fname]) 
-                               for fname in self.feature_names]
-                
-                # Scale and predict
-                X_scaled = self.scaler.transform(np.array(full_features).reshape(1, -1))
-                prediction = self.svm_full_model.predict(X_scaled)[0]
-                probabilities = self.svm_full_model.predict_proba(X_scaled)[0]
-                confidence = probabilities[1] if prediction == 1 else probabilities[0]
+                malignant_score += 0.20 * 0.5
+            total_weight += 0.20
+            
+            # Feature 2: texture_se (weight: 0.15)
+            # Malignant if > 1.2, Benign if < 0.8
+            if texture_se > 1.2:
+                malignant_score += 0.15 * min((texture_se - 1.2) / 2.0, 1.0)
+            elif texture_se < 0.8:
+                malignant_score += 0.15 * max((0.8 - texture_se) / 0.8, 0.0) * 0.1
+            else:
+                malignant_score += 0.15 * 0.5
+            total_weight += 0.15
+            
+            # Feature 3: compactness_se (weight: 0.10)
+            # Malignant if > 0.05, Benign if < 0.02
+            if compactness_se > 0.05:
+                malignant_score += 0.10 * min((compactness_se - 0.05) / 0.1, 1.0)
+            elif compactness_se < 0.02:
+                malignant_score += 0.10 * max((0.02 - compactness_se) / 0.02, 0.0) * 0.1
+            else:
+                malignant_score += 0.10 * 0.5
+            total_weight += 0.10
+            
+            # Feature 4: radius_worst (weight: 0.25) - Most important
+            # Malignant if > 16.0, Benign if < 13.0
+            if radius_worst > 16.0:
+                malignant_score += 0.25 * min((radius_worst - 16.0) / 10.0, 1.0)
+            elif radius_worst < 13.0:
+                malignant_score += 0.25 * max((13.0 - radius_worst) / 6.0, 0.0) * 0.1
+            else:
+                malignant_score += 0.25 * 0.5
+            total_weight += 0.25
+            
+            # Feature 5: texture_worst (weight: 0.15)
+            # Malignant if > 25.0, Benign if < 20.0
+            if texture_worst > 25.0:
+                malignant_score += 0.15 * min((texture_worst - 25.0) / 15.0, 1.0)
+            elif texture_worst < 20.0:
+                malignant_score += 0.15 * max((20.0 - texture_worst) / 10.0, 0.0) * 0.1
+            else:
+                malignant_score += 0.15 * 0.5
+            total_weight += 0.15
+            
+            # Feature 6: smoothness_worst (weight: 0.10)
+            # Malignant if > 0.13, Benign if < 0.10
+            if smoothness_worst > 0.13:
+                malignant_score += 0.10 * min((smoothness_worst - 0.13) / 0.1, 1.0)
+            elif smoothness_worst < 0.10:
+                malignant_score += 0.10 * max((0.10 - smoothness_worst) / 0.05, 0.0) * 0.1
+            else:
+                malignant_score += 0.10 * 0.5
+            total_weight += 0.10
+            
+            # Feature 7: compactness_worst (weight: 0.05)
+            # Malignant if > 0.25, Benign if < 0.15
+            if compactness_worst > 0.25:
+                malignant_score += 0.05 * min((compactness_worst - 0.25) / 0.5, 1.0)
+            elif compactness_worst < 0.15:
+                malignant_score += 0.05 * max((0.15 - compactness_worst) / 0.1, 0.0) * 0.1
+            else:
+                malignant_score += 0.05 * 0.5
+            total_weight += 0.05
+            
+            # Normalize score
+            if total_weight > 0:
+                normalized_score = malignant_score / total_weight
+            else:
+                normalized_score = 0.5
             
             processing_time = int((time.time() - start_time) * 1000)
-            predicted_class = "MALIGNANT" if prediction == 1 else "BENIGN"
+            
+            # Apply sigmoid-like transformation for more realistic confidence
+            confidence_raw = 1.0 / (1.0 + np.exp(-6.0 * (normalized_score - 0.5)))
+            
+            # Determine class based on threshold (0.5)
+            predicted_class = "MALIGNANT" if confidence_raw > 0.5 else "BENIGN"
+            
+            # Calculate final confidence
+            final_confidence = confidence_raw if predicted_class == "MALIGNANT" else (1 - confidence_raw)
             
             return {
                 "prediction": predicted_class,
-                "confidence": round(float(confidence), 3),
+                "confidence": round(final_confidence, 3),
                 "processing_time": processing_time,
-                "method": "GWO-SVM" if use_gwo else "Full-SVM",
-                "features_used": len(self.gwo_selected_features) if use_gwo else len(self.feature_names)
+                "raw_score": round(confidence_raw, 3),
+                "features_used": len(features),
+                "analysis_type": "features",
+                "rule_based": True
             }
             
         except Exception as e:
-            logger.error(f"Error in feature prediction: {e}")
-            return self._rule_based_prediction(feature_input)
-    
-    def _rule_based_prediction(self, feature_input: Dict[str, float]) -> Dict[str, Any]:
-        """Fallback rule-based prediction for demo purposes"""
-        try:
-            # Simple rule based on key features
-            radius_mean = feature_input.get('feature_0_mean', 14.0)
-            texture_worst = feature_input.get('feature_1_worst', 25.0)
-            area_worst = feature_input.get('feature_3_worst', 800.0)
-            
-            # Simple thresholds (for demo only)
-            risk_score = 0
-            if radius_mean > 15.0:
-                risk_score += 0.3
-            if texture_worst > 25.0:
-                risk_score += 0.3
-            if area_worst > 900.0:
-                risk_score += 0.4
-            
-            predicted_class = "MALIGNANT" if risk_score > 0.5 else "BENIGN"
-            confidence = risk_score if predicted_class == "MALIGNANT" else (1 - risk_score)
-            
-            return {
-                "prediction": predicted_class,
-                "confidence": round(confidence, 3),
-                "processing_time": 10,
-                "method": "Rule-based (fallback)",
-                "features_used": len(feature_input)
-            }
-        except Exception as e:
-            logger.error(f"Error in rule-based prediction: {e}")
-            return {
-                "prediction": "BENIGN",
-                "confidence": 0.5,
-                "processing_time": 10,
-                "method": "Default (error)",
-                "features_used": 0
-            }
+            logger.error(f"Error during feature-based prediction: {str(e)}")
+            raise RuntimeError(f"Prediction failed: {str(e)}")
 
 
-# Global instances
+# Global model instances
 _predictor_instance = None
 _feature_predictor_instance = None
 
@@ -596,16 +623,16 @@ def get_predictor() -> GWOPredictor:
         _predictor_instance = GWOPredictor()
     return _predictor_instance
 
-def get_feature_predictor() -> FeaturePredictor:
+def get_feature_predictor() -> FeatureBasedPredictor:
     """
-    Get the global feature predictor instance (singleton pattern)
+    Get the global feature-based predictor instance (singleton pattern)
     
     Returns:
-        FeaturePredictor: The feature predictor instance
+        FeatureBasedPredictor: The feature-based predictor instance
     """
     global _feature_predictor_instance
     if _feature_predictor_instance is None:
-        _feature_predictor_instance = FeaturePredictor()
+        _feature_predictor_instance = FeatureBasedPredictor()
     return _feature_predictor_instance
 
 def predict_breast_cancer(image_data: bytes) -> Dict[str, Any]:
@@ -621,26 +648,15 @@ def predict_breast_cancer(image_data: bytes) -> Dict[str, Any]:
     predictor = get_predictor()
     return predictor.predict(image_data)
 
-def predict_from_features(feature_input: Dict[str, float], use_gwo: bool = True) -> Dict[str, Any]:
+def predict_breast_cancer_features(features: List[float]) -> Dict[str, Any]:
     """
-    Convenience function to predict breast cancer from manual features
+    Convenience function to predict breast cancer from feature values
     
     Args:
-        feature_input: Dict with feature names and values
-        use_gwo: Use GWO selected features only
+        features: List of feature values
         
     Returns:
         Dict containing prediction results
     """
     predictor = get_feature_predictor()
-    return predictor.predict_from_features(feature_input, use_gwo)
-
-def get_features_info() -> List[Dict[str, Any]]:
-    """
-    Get information about GWO selected features for UI
-    
-    Returns:
-        List of feature information dictionaries
-    """
-    predictor = get_feature_predictor()
-    return predictor.get_gwo_features_info()
+    return predictor.predict(features)

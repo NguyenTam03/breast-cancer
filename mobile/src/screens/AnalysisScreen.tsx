@@ -21,25 +21,20 @@ import Card from '../components/Card';
 import { colors } from '../theme/colors';
 
 export default function AnalysisScreen({ route, navigation }: any) {
-  const { 
-    imageUri, 
-    analysisResult: existingResult, 
-    isFromHistory, 
-    isFromFeatures 
-  } = route.params;
+  const { imageUri, analysisResult: existingResult, isFromHistory, analysisType } = route.params;
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(existingResult || null);
   const [fadeAnim] = useState(new Animated.Value(1));
 
   // API Base URL for images
   const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';
 
-  // Determine the image source (only for image analysis)
-  const imageSource = !isFromFeatures && isFromHistory && existingResult?.imageUrl 
+  // Determine analysis type
+  const isFeatureBasedAnalysis = analysisType === 'features' || existingResult?.analysisType === 'features';
+
+  // Determine the image source
+  const imageSource = isFromHistory && existingResult?.imageUrl 
     ? `${API_BASE_URL}${existingResult.imageUrl}`
     : imageUri;
-  
-  // Check if this is feature analysis
-  const isFeatureAnalysis = isFromFeatures || existingResult?.analysisType === 'features';
 
   // Mutation for image analysis
   const analysisMutation = useMutation({
@@ -119,7 +114,7 @@ export default function AnalysisScreen({ route, navigation }: any) {
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {isFeatureAnalysis ? 'Phân tích Features' : 'Phân tích hình ảnh'}
+            {isFeatureBasedAnalysis ? 'Phân tích bằng Features' : 'Phân tích hình ảnh'}
           </Text>
           <TouchableOpacity style={styles.headerButton}>
             <Ionicons name="help-circle-outline" size={24} color="white" />
@@ -131,8 +126,8 @@ export default function AnalysisScreen({ route, navigation }: any) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Image Display - only for image analysis */}
-          {!isFeatureAnalysis && imageSource && (
+          {/* Image Display or Features Display */}
+          {!isFeatureBasedAnalysis ? (
             <View style={styles.imageSection}>
               <View style={styles.imageContainer}>
                 <Image source={{ uri: imageSource }} style={styles.image} />
@@ -149,36 +144,40 @@ export default function AnalysisScreen({ route, navigation }: any) {
                 </LinearGradient>
               </View>
             </View>
-          )}
-
-          {/* Feature Analysis Display */}
-          {isFeatureAnalysis && (
-            <Card style={styles.featureCard} padding="large">
-              <View style={styles.featureHeader}>
-                <Ionicons name="calculator" size={24} color="#4c6ef5" />
-                <Text style={styles.featureTitle}>Phân tích từ Features</Text>
-              </View>
-              <Text style={styles.featureDescription}>
-                Kết quả dựa trên {analysisResult?.method || 'GWO-SVM'} với {analysisResult?.featuresUsed || 7} features được chọn
-              </Text>
-              {analysisResult?.inputFeatures && (
-                <View style={styles.featuresPreview}>
-                  <Text style={styles.featuresPreviewTitle}>Features đã nhập:</Text>
+          ) : (
+            <View style={styles.featuresSection}>
+              <Card style={styles.featuresCard} padding="large">
+                <View style={styles.featuresHeader}>
+                  <View style={styles.featuresIconContainer}>
+                    <Ionicons name="analytics" size={24} color="#26de81" />
+                  </View>
+                  <View style={styles.featuresInfo}>
+                    <Text style={styles.featuresTitle}>Features được sử dụng</Text>
+                    <Text style={styles.featuresSubtitle}>
+                      {analysisResult?.featuresInfo?.featureCount || 7} features được chọn bởi GWO
+                    </Text>
+                  </View>
+                </View>
+                
+                {analysisResult?.featuresInfo?.selectedFeatures && (
                   <View style={styles.featuresList}>
-                    {Object.entries(analysisResult.inputFeatures).slice(0, 3).map(([key, value]) => (
-                      <Text key={key} style={styles.featureItem}>
-                        • {key}: {value}
-                      </Text>
+                    {analysisResult.featuresInfo.selectedFeatures.slice(0, 3).map((feature: any, index: number) => (
+                      <View key={feature.index} style={styles.featureItem}>
+                        <Text style={styles.featureItemName}>{feature.description}</Text>
+                        <Text style={styles.featureItemValue}>
+                          {analysisResult.featuresInfo?.featureValues?.[index]?.toFixed(3) || 'N/A'}
+                        </Text>
+                      </View>
                     ))}
-                    {Object.keys(analysisResult.inputFeatures).length > 3 && (
-                      <Text style={styles.featureItem}>
-                        ... và {Object.keys(analysisResult.inputFeatures).length - 3} features khác
+                    {analysisResult.featuresInfo.selectedFeatures.length > 3 && (
+                      <Text style={styles.moreFeatures}>
+                        +{analysisResult.featuresInfo.selectedFeatures.length - 3} features khác
                       </Text>
                     )}
                   </View>
-                </View>
-              )}
-            </Card>
+                )}
+              </Card>
+            </View>
           )}
 
           {/* Analysis Section */}
@@ -537,44 +536,68 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
   },
-  featureCard: {
-    marginHorizontal: 20,
+  featuresSection: {
+    paddingHorizontal: 20,
     marginBottom: 24,
   },
-  featureHeader: {
+  featuresCard: {
+    backgroundColor: '#2a2a3e',
+  },
+  featuresHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  featureDescription: {
-    color: '#8e8e93',
-    fontSize: 14,
-    lineHeight: 20,
     marginBottom: 16,
   },
-  featuresPreview: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    padding: 16,
+  featuresIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(38, 222, 129, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  featuresPreviewTitle: {
+  featuresInfo: {
+    flex: 1,
+  },
+  featuresTitle: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  featuresSubtitle: {
+    color: '#8e8e93',
     fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
   },
   featuresList: {
-    gap: 4,
+    marginTop: 16,
   },
   featureItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  featureItemName: {
+    color: 'white',
+    fontSize: 14,
+    flex: 1,
+  },
+  featureItemValue: {
+    color: '#26de81',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  moreFeatures: {
     color: '#8e8e93',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });

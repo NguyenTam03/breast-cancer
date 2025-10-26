@@ -9,7 +9,7 @@ import { AnalysisResult, AnalysisHistory } from '../types/analysis.types';
 // API Configuration  
 // For Android emulator, use 10.0.2.2 instead of localhost
 // For physical device or iOS simulator, use your computer's IP address
-const API_BASE_URL = 'http://192.168.1.3:8000/api/v1';
+const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';
 
 class ApiService {
   private client: AxiosInstance;
@@ -87,6 +87,24 @@ class ApiService {
       },
     });
 
+    return response.data;
+  }
+
+  /**
+   * Analyze features for breast cancer detection using GWO-selected features
+   */
+  async predictFeatures(
+    requestData: { features: number[]; notes?: string }
+  ): Promise<AnalysisResult> {
+    const response = await this.client.post('/analysis/predict-features', requestData);
+    return response.data;
+  }
+
+  /**
+   * Get feature information for prediction
+   */
+  async getFeatureInfo(): Promise<any> {
+    const response = await this.client.get('/analysis/features/info');
     return response.data;
   }
 

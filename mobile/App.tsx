@@ -21,9 +21,9 @@ import FeatureInputScreen from './src/screens/FeatureInputScreen';
 // Define navigation types
 export type RootStackParamList = {
   Home: undefined;
-  Analysis: { imageUri?: string; analysisResult?: any; isFromHistory?: boolean; isFromFeatures?: boolean };
+  Analysis: { imageUri: string };
+  FeatureInput: undefined;
   HistoryMain: undefined;
-  FeatureInputScreen: undefined;
 };
 
 // Create navigators
@@ -51,7 +51,7 @@ function HomeStack() {
     >
       <Stack.Screen name="Home" component={NewHomeScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
-      <Stack.Screen name="FeatureInputScreen" component={FeatureInputScreen} />
+      <Stack.Screen name="FeatureInput" component={FeatureInputScreen} />
     </Stack.Navigator>
   );
 }
@@ -66,21 +66,6 @@ function HistoryStack() {
       }}
     >
       <Stack.Screen name="HistoryMain" component={HistoryScreen} />
-      <Stack.Screen name="Analysis" component={AnalysisScreen} />
-    </Stack.Navigator>
-  );
-}
-
-// Features Stack Navigator
-function FeaturesStack() {
-  return (
-    <Stack.Navigator 
-      screenOptions={{ 
-        headerShown: false,
-        cardStyle: { backgroundColor: '#1a1a2e' }
-      }}
-    >
-      <Stack.Screen name="FeatureInputMain" component={FeatureInputScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
     </Stack.Navigator>
   );
@@ -114,8 +99,6 @@ function MainTabs() {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'HistoryTab') {
             iconName = focused ? 'analytics' : 'analytics-outline';
-          } else if (route.name === 'FeaturesTab') {
-            iconName = focused ? 'calculator' : 'calculator-outline';
           } else if (route.name === 'SettingsTab') {
             iconName = focused ? 'settings' : 'settings-outline';
           } else {
@@ -137,14 +120,7 @@ function MainTabs() {
         name="HistoryTab" 
         component={HistoryStack}
         options={{
-          tabBarLabel: 'Lịch sử',
-        }}
-      />
-      <Tab.Screen 
-        name="FeaturesTab" 
-        component={FeaturesStack}
-        options={{
-          tabBarLabel: 'Features',
+          tabBarLabel: 'Phân tích',
         }}
       />
       <Tab.Screen 

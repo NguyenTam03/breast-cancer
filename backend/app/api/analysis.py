@@ -14,12 +14,12 @@ from fastapi.security import HTTPBearer
 from typing import List, Optional
 from PIL import Image
 from beanie import PydanticObjectId
+from pydantic import BaseModel, Field
 
-from app.models.analysis import Analysis, FeatureAnalysis, PredictionResult, ImageInfo, MLResults, AnalysisMetadata, FeatureData
+from app.models.analysis import Analysis, PredictionResult, ImageInfo, MLResults, AnalysisMetadata, AnalysisType
 from app.models.user import User
-from app.ml.model_service import predict_breast_cancer, get_predictor, predict_from_features, get_features_info
+from app.ml.model_service import predict_breast_cancer, get_predictor, predict_breast_cancer_features, get_feature_predictor
 from app.utils.dependencies import get_current_user
-from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,19 @@ router = APIRouter()
 security = HTTPBearer()
 
 
-class FeatureAnalysisRequest(BaseModel):
-    feature_data: dict
-    use_gwo: bool = True
-    notes: Optional[str] = None
+# Request models for feature-based prediction
+class FeaturePredictionRequest(BaseModel):
+    """Request model for feature-based breast cancer prediction"""
+    features: List[float] = Field(..., description="List of feature values", min_items=1, max_items=30)
+    notes: Optional[str] = Field(None, description="Optional user notes")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "features": [14.127, 0.905, 0.02592, 16.14, 23.96, 0.1149, 0.1876],
+                "notes": "Dữ liệu từ bệnh viện ABC"
+            }
+        }
 
 
 @router.post("/predict")
@@ -161,6 +170,127 @@ async def analyze_image(
         )
 
 
+@router.post("/predict-features")
+async def analyze_features(
+    request: FeaturePredictionRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Analyze feature values for breast cancer detection using GWO-selected features"""
+    
+    try:
+        # Get feature predictor and feature info
+        predictor = get_feature_predictor()
+        feature_info = predictor.get_selected_feature_info()
+        
+        # Validate feature count
+        expected_count = len(feature_info)
+        if len(request.features) != expected_count:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Expected {expected_count} features, got {len(request.features)}"
+            )
+        
+        # Run ML model prediction
+        try:
+            prediction_result = predict_breast_cancer_features(request.features)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Prediction failed: {str(e)}"
+            )
+        
+        # Generate unique analysis ID
+        analysis_id = str(uuid.uuid4())
+        
+        # Prepare response
+        analysis_result = {
+            "id": analysis_id,
+            "prediction": prediction_result["prediction"],
+            "confidence": prediction_result["confidence"],
+            "processingTime": prediction_result["processing_time"],
+            "analysisDate": datetime.utcnow().isoformat() + "Z",
+            "analysisType": "features",
+            "featuresInfo": {
+                "featureCount": len(request.features),
+                "selectedFeatures": feature_info,
+                "featureValues": request.features
+            },
+            "userNotes": request.notes,
+            "isBookmarked": False,
+            "tags": [],
+            "rawScore": prediction_result.get("raw_score", 0)
+        }
+        
+        # Save analysis results to database
+        try:
+            # Create Analysis document for feature-based analysis
+            analysis_doc = Analysis(
+                userId=current_user.id,
+                analysisType=AnalysisType.FEATURES,  # Set analysis type to features
+                imageInfo=ImageInfo(
+                    originalName="feature_analysis",
+                    filePath="",  # No file for feature analysis
+                    fileSize=0,
+                    mimeType="application/json",
+                    dimensions={"width": 0, "height": 0}
+                ),
+                mlResults=MLResults(
+                    prediction=prediction_result["prediction"],
+                    confidence=prediction_result["confidence"],
+                    processingTime=prediction_result["processing_time"],
+                    rawOutput=prediction_result.get("raw_score", 0),
+                    features=request.features  # Store the features used
+                ),
+                metadata=AnalysisMetadata(
+                    deviceInfo="Mobile",
+                    appVersion="1.0.0"
+                ),
+                userNotes=request.notes
+            )
+            
+            # Save to database
+            saved_analysis = await analysis_doc.save()
+            
+            # Update response with saved ID
+            analysis_result["id"] = str(saved_analysis.id)
+            
+        except Exception as e:
+            logger.error(f"Failed to save feature analysis to database: {e}")
+            # Continue with response even if database save fails
+        
+        return analysis_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Feature analysis failed: {str(e)}"
+        )
+
+
+@router.get("/features/info")
+async def get_feature_info():
+    """Get information about features used for prediction"""
+    try:
+        predictor = get_feature_predictor()
+        feature_info = predictor.get_selected_feature_info()
+        
+        return {
+            "selectedFeatures": feature_info,
+            "featureCount": len(feature_info),
+            "modelType": "SVM with GWO feature selection",
+            "description": "7 features được chọn bởi Grey Wolf Optimizer từ 30 features gốc"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get feature info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve feature information: {str(e)}"
+        )
+
+
 @router.get("/image/{analysis_id}")
 async def get_analysis_image(analysis_id: str):
     """Get the image associated with an analysis"""
@@ -209,98 +339,49 @@ async def get_analysis_history(
 ):
     """Get user's analysis history - returns all analyses (for testing)"""
     try:
-        # Build query filter
+        # Calculate skip for pagination
+        skip = (page - 1) * pageSize
+        
+        # TODO: Use current_user.id when auth is enabled
+        # For now, get all analyses for testing
         query_filter = {}
         if filter_prediction:
             query_filter["mlResults.prediction"] = filter_prediction.upper()
         
-        all_analyses = []
+        # Get total count
+        total_count = await Analysis.find(query_filter).count()
         
-        # Get image analyses with error handling
-        try:
-            image_analyses = await Analysis.find(query_filter)\
-                .sort("-createdAt")\
-                .to_list()
-            
-            # Format image analyses
-            for analysis in image_analyses:
-                try:
-                    formatted_analysis = {
-                        "id": str(analysis.id),
-                        "prediction": analysis.mlResults.prediction,
-                        "confidence": analysis.mlResults.confidence,
-                        "processingTime": analysis.mlResults.processingTime,
-                        "analysisDate": analysis.metadata.analysisDate.isoformat() + "Z",
-                        "analysisType": "image",
-                        "imageInfo": {
-                            "originalName": analysis.imageInfo.originalName,
-                            "fileSize": analysis.imageInfo.fileSize,
-                            "mimeType": analysis.imageInfo.mimeType,
-                            "dimensions": analysis.imageInfo.dimensions
-                        },
-                        "imageUrl": f"/analysis/image/{str(analysis.id)}",
-                        "userNotes": analysis.userNotes,
-                        "isBookmarked": analysis.isBookmarked,
-                        "tags": analysis.tags,
-                        "createdAt": analysis.createdAt
-                    }
-                    all_analyses.append(formatted_analysis)
-                except Exception as format_error:
-                    logger.warning(f"Failed to format image analysis {analysis.id}: {format_error}")
-                    continue
-        except Exception as image_error:
-            logger.warning(f"Failed to get image analyses: {image_error}")
+        # Get analyses with pagination
+        analyses = await Analysis.find(query_filter)\
+            .sort("-createdAt")\
+            .skip(skip)\
+            .limit(pageSize)\
+            .to_list()
         
-        # Get feature analyses with error handling
-        try:
-            feature_analyses = await FeatureAnalysis.find(query_filter)\
-                .sort("-createdAt")\
-                .to_list()
-            
-            # Format feature analyses
-            for analysis in feature_analyses:
-                try:
-                    formatted_analysis = {
-                        "id": str(analysis.id),
-                        "prediction": analysis.mlResults.prediction,
-                        "confidence": analysis.mlResults.confidence,
-                        "processingTime": analysis.mlResults.processingTime,
-                        "analysisDate": analysis.metadata.analysisDate.isoformat() + "Z",
-                        "analysisType": "features",
-                        "method": analysis.featureData.method,
-                        "featuresUsed": analysis.featureData.featuresUsed,
-                        "useGWO": analysis.featureData.useGWO,
-                        "inputFeatures": analysis.featureData.inputFeatures,
-                        "userNotes": analysis.userNotes,
-                        "isBookmarked": analysis.isBookmarked,
-                        "tags": analysis.tags,
-                        "createdAt": analysis.createdAt
-                    }
-                    all_analyses.append(formatted_analysis)
-                except Exception as format_error:
-                    logger.warning(f"Failed to format feature analysis {analysis.id}: {format_error}")
-                    continue
-        except Exception as feature_error:
-            logger.warning(f"Failed to get feature analyses: {feature_error}")
-        
-        # Sort combined analyses by creation date (newest first)
-        try:
-            all_analyses.sort(key=lambda x: x["createdAt"], reverse=True)
-        except Exception as sort_error:
-            logger.warning(f"Failed to sort analyses: {sort_error}")
-        
-        # Calculate pagination
-        total_count = len(all_analyses)
-        skip = (page - 1) * pageSize
-        paginated_analyses = all_analyses[skip:skip + pageSize]
-        
-        # Remove createdAt from final response (used only for sorting)
-        for analysis in paginated_analyses:
-            if "createdAt" in analysis:
-                del analysis["createdAt"]
+        # Format analyses to match mobile app expected structure
+        formatted_analyses = []
+        for analysis in analyses:
+            formatted_analysis = {
+                "id": str(analysis.id),
+                "prediction": analysis.mlResults.prediction,
+                "confidence": analysis.mlResults.confidence,
+                "processingTime": analysis.mlResults.processingTime,
+                "analysisDate": analysis.metadata.analysisDate.isoformat() + "Z",
+                "imageInfo": {
+                    "originalName": analysis.imageInfo.originalName,
+                    "fileSize": analysis.imageInfo.fileSize,
+                    "mimeType": analysis.imageInfo.mimeType,
+                    "dimensions": analysis.imageInfo.dimensions
+                },
+                "imageUrl": f"/analysis/image/{str(analysis.id)}",  # Add image URL
+                "userNotes": analysis.userNotes,
+                "isBookmarked": analysis.isBookmarked,
+                "tags": analysis.tags
+            }
+            formatted_analyses.append(formatted_analysis)
         
         return {
-            "analyses": paginated_analyses,
+            "analyses": formatted_analyses,
             "totalCount": total_count,
             "page": page,
             "pageSize": pageSize
@@ -308,14 +389,10 @@ async def get_analysis_history(
         
     except Exception as e:
         logger.error(f"Failed to get analysis history: {e}")
-        # Return empty result instead of error to prevent app crash
-        return {
-            "analyses": [],
-            "totalCount": 0,
-            "page": page,
-            "pageSize": pageSize,
-            "error": "Failed to retrieve analysis history"
-        }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve analysis history: {str(e)}"
+        )
 
 
 @router.get("/history/{user_id}")
@@ -466,261 +543,3 @@ async def toggle_bookmark(analysis_id: str):
         "message": "Bookmark toggled successfully",
         "isBookmarked": True
     }
-
-
-@router.get("/features/info")
-async def get_features_information():
-    """Get information about GWO-selected features for UI form"""
-    try:
-        features_info = get_features_info()
-        return {
-            "success": True,
-            "features": features_info,
-            "totalFeatures": len(features_info),
-            "description": "GWO-selected features for breast cancer diagnosis"
-        }
-    except Exception as e:
-        logger.error(f"Failed to get features info: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve features information: {str(e)}"
-        )
-
-
-@router.post("/predict/features")
-async def analyze_features(
-    request: FeatureAnalysisRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Analyze manually input features for breast cancer detection"""
-    try:
-        # Extract data from request
-        feature_data = request.feature_data
-        use_gwo = request.use_gwo
-        notes = request.notes
-        
-        # Validate feature data
-        if not feature_data or not isinstance(feature_data, dict):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Feature data must be a non-empty dictionary"
-            )
-        
-        # Log received data for debugging
-        logger.info(f"Received request: {request}")
-        logger.info(f"Received feature_data: {feature_data}")
-        
-        # Convert all values to floats with better error handling
-        cleaned_features = {}
-        for key, value in feature_data.items():
-            if value is None:
-                logger.warning(f"Feature '{key}' has None value, skipping")
-                continue
-                
-            # Handle various input types
-            try:
-                if isinstance(value, (int, float)):
-                    cleaned_features[key] = float(value)
-                elif isinstance(value, str):
-                    # Remove whitespace and handle empty strings
-                    cleaned_value = value.strip()
-                    if not cleaned_value:
-                        logger.warning(f"Feature '{key}' has empty string value, skipping")
-                        continue
-                    cleaned_features[key] = float(cleaned_value)
-                else:
-                    raise ValueError(f"Unsupported type: {type(value)}")
-                    
-            except (ValueError, TypeError) as e:
-                logger.error(f"Failed to convert feature '{key}' with value '{value}' to float: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid value for feature '{key}': must be a number (received: {value}, type: {type(value).__name__})"
-                )
-        
-        if not cleaned_features:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No valid features provided after cleaning"
-            )
-        
-        logger.info(f"Cleaned features: {cleaned_features}")
-        
-        # Run ML model prediction on features
-        try:
-            prediction_result = predict_from_features(cleaned_features, use_gwo)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Feature prediction failed: {str(e)}"
-            )
-        
-        # Generate unique analysis ID
-        analysis_id = str(uuid.uuid4())
-        
-        # Prepare response
-        analysis_result = {
-            "id": analysis_id,
-            "prediction": prediction_result["prediction"],
-            "confidence": prediction_result["confidence"],
-            "processingTime": prediction_result["processing_time"],
-            "analysisDate": datetime.utcnow().isoformat() + "Z",
-            "method": prediction_result.get("method", "GWO-SVM"),
-            "featuresUsed": prediction_result.get("features_used", 0),
-            "inputFeatures": cleaned_features,
-            "useGWO": use_gwo,
-            "userNotes": notes,
-            "isBookmarked": False,
-            "tags": ["manual-features"],
-            "analysisType": "features"
-        }
-        
-        # Save feature analysis results to database
-        try:
-            # Create FeatureAnalysis document
-            feature_analysis_doc = FeatureAnalysis(
-                userId=current_user.id,  # Use current authenticated user
-                featureData=FeatureData(
-                    inputFeatures=cleaned_features,
-                    useGWO=use_gwo,
-                    method=prediction_result.get("method", "GWO-SVM"),
-                    featuresUsed=prediction_result.get("features_used", 0)
-                ),
-                mlResults=MLResults(
-                    prediction=prediction_result["prediction"],
-                    confidence=prediction_result["confidence"],
-                    processingTime=prediction_result["processing_time"],
-                    rawOutput=prediction_result.get("raw_score", 0.0),
-                    modelVersion="gwo-svm-v1.0"
-                ),
-                metadata=AnalysisMetadata(
-                    deviceInfo="Mobile",
-                    appVersion="1.0.0",
-                    analysisType="features"
-                ),
-                userNotes=notes,
-                tags=["manual-features"]
-            )
-            
-            # Save to database
-            saved_analysis = await feature_analysis_doc.save()
-            
-            # Update response with saved ID
-            analysis_result["id"] = str(saved_analysis.id)
-            
-            logger.info(f"Feature analysis saved to database with ID: {saved_analysis.id}")
-            
-        except Exception as e:
-            logger.error(f"Failed to save feature analysis to database: {e}")
-            # Continue with response even if database save fails
-        
-        return analysis_result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Feature analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Feature analysis failed: {str(e)}"
-        )
-
-
-@router.post("/compare")
-async def compare_methods(
-    image: Optional[UploadFile] = File(None),
-    feature_data: Optional[dict] = None,
-    use_gwo: bool = True,
-    notes: Optional[str] = None
-):
-    """Compare image-based and feature-based predictions"""
-    try:
-        results = {}
-        
-        # Image-based prediction if image provided
-        if image and image.filename:
-            # Validate image
-            if not image.content_type.startswith("image/"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="File must be an image"
-                )
-            
-            try:
-                image_data = await image.read()
-                image_prediction = predict_breast_cancer(image_data)
-                results["image_prediction"] = {
-                    "prediction": image_prediction["prediction"],
-                    "confidence": image_prediction["confidence"],
-                    "processing_time": image_prediction["processing_time"],
-                    "method": "CNN-GWO"
-                }
-            except Exception as e:
-                results["image_prediction"] = {
-                    "error": f"Image prediction failed: {str(e)}"
-                }
-        
-        # Feature-based prediction if features provided
-        if feature_data and isinstance(feature_data, dict):
-            try:
-                # Clean feature data
-                cleaned_features = {}
-                for key, value in feature_data.items():
-                    try:
-                        cleaned_features[key] = float(value)
-                    except (ValueError, TypeError):
-                        continue
-                
-                if cleaned_features:
-                    feature_prediction = predict_from_features(cleaned_features, use_gwo)
-                    results["feature_prediction"] = {
-                        "prediction": feature_prediction["prediction"],
-                        "confidence": feature_prediction["confidence"],
-                        "processing_time": feature_prediction["processing_time"],
-                        "method": feature_prediction.get("method", "GWO-SVM"),
-                        "features_used": feature_prediction.get("features_used", 0)
-                    }
-                else:
-                    results["feature_prediction"] = {
-                        "error": "No valid features provided"
-                    }
-            except Exception as e:
-                results["feature_prediction"] = {
-                    "error": f"Feature prediction failed: {str(e)}"
-                }
-        
-        # Check if at least one method was used
-        if not results:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either image or feature data must be provided"
-            )
-        
-        # Add comparison analysis if both methods worked
-        if ("image_prediction" in results and "error" not in results["image_prediction"] and
-            "feature_prediction" in results and "error" not in results["feature_prediction"]):
-            
-            img_pred = results["image_prediction"]
-            feat_pred = results["feature_prediction"]
-            
-            results["comparison"] = {
-                "agreement": img_pred["prediction"] == feat_pred["prediction"],
-                "confidence_difference": abs(img_pred["confidence"] - feat_pred["confidence"]),
-                "average_confidence": (img_pred["confidence"] + feat_pred["confidence"]) / 2
-            }
-        
-        return {
-            "success": True,
-            "analysisDate": datetime.utcnow().isoformat() + "Z",
-            "results": results,
-            "notes": notes
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Comparison analysis failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Comparison analysis failed: {str(e)}"
-        )
