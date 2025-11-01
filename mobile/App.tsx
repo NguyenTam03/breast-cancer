@@ -16,13 +16,11 @@ import NewHomeScreen from './src/screens/NewHomeScreen';
 import AnalysisScreen from './src/screens/AnalysisScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
-import FeatureInputScreen from './src/screens/FeatureInputScreen';
 
 // Define navigation types
 export type RootStackParamList = {
   Home: undefined;
   Analysis: { imageUri: string };
-  FeatureInput: undefined;
   HistoryMain: undefined;
 };
 
@@ -51,7 +49,6 @@ function HomeStack() {
     >
       <Stack.Screen name="Home" component={NewHomeScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
-      <Stack.Screen name="FeatureInput" component={FeatureInputScreen} />
     </Stack.Navigator>
   );
 }

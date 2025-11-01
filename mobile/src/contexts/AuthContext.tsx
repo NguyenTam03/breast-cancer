@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isAuthenticated: true,
           });
         } catch (error) {
-          console.log('Access token expired, attempting to refresh...');
+          console.log('Đang làm mới phiên đăng nhập...');
           // Token might be expired, try to refresh
           if (refreshToken) {
             try {
@@ -67,10 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 isLoading: false,
                 isAuthenticated: true,
               });
-              console.log('Token refreshed successfully');
+              console.log('Đã làm mới phiên đăng nhập thành công');
             } catch (refreshError: any) {
               // Refresh failed, clear stored data and log out user
-              console.log('Refresh token expired or invalid, logging out user');
+              console.log('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
               await clearStorage();
               setAuthState({
                 user: null,

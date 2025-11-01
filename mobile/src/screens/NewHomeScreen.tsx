@@ -228,14 +228,6 @@ export default function NewHomeScreen({ navigation }: any) {
                 gradient={['#a55eea', '#8c7ae6']}
                 onPress={pickFromGallery}
               />
-              
-              <FeatureCard
-                title="Phân tích bằng số liệu"
-                subtitle="Nhập 7 features để phân tích."
-                icon="analytics"
-                gradient={['#26de81', '#20bf6b']}
-                onPress={() => navigation.navigate('FeatureInput')}
-              />
             </View>
           </View>
         </View>

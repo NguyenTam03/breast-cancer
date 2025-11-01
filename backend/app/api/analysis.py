@@ -18,28 +18,13 @@ from pydantic import BaseModel, Field
 
 from app.models.analysis import Analysis, PredictionResult, ImageInfo, MLResults, AnalysisMetadata, AnalysisType
 from app.models.user import User
-from app.ml.model_service import predict_breast_cancer, get_predictor, predict_breast_cancer_features, get_feature_predictor
+from app.ml.model_service import predict_breast_cancer, get_predictor
 from app.utils.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 security = HTTPBearer()
-
-
-# Request models for feature-based prediction
-class FeaturePredictionRequest(BaseModel):
-    """Request model for feature-based breast cancer prediction"""
-    features: List[float] = Field(..., description="List of feature values", min_items=1, max_items=30)
-    notes: Optional[str] = Field(None, description="Optional user notes")
-    
-    class Config:
-        schema_extra = {
-            "example": {
-                "features": [14.127, 0.905, 0.02592, 16.14, 23.96, 0.1149, 0.1876],
-                "notes": "Dữ liệu từ bệnh viện ABC"
-            }
-        }
 
 
 @router.post("/predict")
@@ -167,127 +152,6 @@ async def analyze_image(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis failed: {str(e)}"
-        )
-
-
-@router.post("/predict-features")
-async def analyze_features(
-    request: FeaturePredictionRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Analyze feature values for breast cancer detection using GWO-selected features"""
-    
-    try:
-        # Get feature predictor and feature info
-        predictor = get_feature_predictor()
-        feature_info = predictor.get_selected_feature_info()
-        
-        # Validate feature count
-        expected_count = len(feature_info)
-        if len(request.features) != expected_count:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Expected {expected_count} features, got {len(request.features)}"
-            )
-        
-        # Run ML model prediction
-        try:
-            prediction_result = predict_breast_cancer_features(request.features)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Prediction failed: {str(e)}"
-            )
-        
-        # Generate unique analysis ID
-        analysis_id = str(uuid.uuid4())
-        
-        # Prepare response
-        analysis_result = {
-            "id": analysis_id,
-            "prediction": prediction_result["prediction"],
-            "confidence": prediction_result["confidence"],
-            "processingTime": prediction_result["processing_time"],
-            "analysisDate": datetime.utcnow().isoformat() + "Z",
-            "analysisType": "features",
-            "featuresInfo": {
-                "featureCount": len(request.features),
-                "selectedFeatures": feature_info,
-                "featureValues": request.features
-            },
-            "userNotes": request.notes,
-            "isBookmarked": False,
-            "tags": [],
-            "rawScore": prediction_result.get("raw_score", 0)
-        }
-        
-        # Save analysis results to database
-        try:
-            # Create Analysis document for feature-based analysis
-            analysis_doc = Analysis(
-                userId=current_user.id,
-                analysisType=AnalysisType.FEATURES,  # Set analysis type to features
-                imageInfo=ImageInfo(
-                    originalName="feature_analysis",
-                    filePath="",  # No file for feature analysis
-                    fileSize=0,
-                    mimeType="application/json",
-                    dimensions={"width": 0, "height": 0}
-                ),
-                mlResults=MLResults(
-                    prediction=prediction_result["prediction"],
-                    confidence=prediction_result["confidence"],
-                    processingTime=prediction_result["processing_time"],
-                    rawOutput=prediction_result.get("raw_score", 0),
-                    features=request.features  # Store the features used
-                ),
-                metadata=AnalysisMetadata(
-                    deviceInfo="Mobile",
-                    appVersion="1.0.0"
-                ),
-                userNotes=request.notes
-            )
-            
-            # Save to database
-            saved_analysis = await analysis_doc.save()
-            
-            # Update response with saved ID
-            analysis_result["id"] = str(saved_analysis.id)
-            
-        except Exception as e:
-            logger.error(f"Failed to save feature analysis to database: {e}")
-            # Continue with response even if database save fails
-        
-        return analysis_result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Feature analysis failed: {str(e)}"
-        )
-
-
-@router.get("/features/info")
-async def get_feature_info():
-    """Get information about features used for prediction"""
-    try:
-        predictor = get_feature_predictor()
-        feature_info = predictor.get_selected_feature_info()
-        
-        return {
-            "selectedFeatures": feature_info,
-            "featureCount": len(feature_info),
-            "modelType": "SVM with GWO feature selection",
-            "description": "7 features được chọn bởi Grey Wolf Optimizer từ 30 features gốc"
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to get feature info: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve feature information: {str(e)}"
         )
 
 
