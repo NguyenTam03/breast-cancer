@@ -12,6 +12,7 @@ from enum import Enum
 class PredictionResult(str, Enum):
     BENIGN = "BENIGN"
     MALIGNANT = "MALIGNANT"
+    NORMAL = "NORMAL"
 
 
 class AnalysisType(str, Enum):

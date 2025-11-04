@@ -67,7 +67,20 @@ async def analyze_image(
         # Run ML model prediction
         try:
             prediction_result = predict_breast_cancer(image_data)
+            
+            # 🔍 DEBUG: Print probabilities to console
+            logger.info("="*60)
+            logger.info("🔬 PREDICTION RESULTS:")
+            logger.info(f"   Predicted Class: {prediction_result['prediction']}")
+            logger.info(f"   Confidence: {prediction_result['confidence']*100:.2f}%")
+            logger.info("   Probabilities for all classes:")
+            if 'probabilities' in prediction_result:
+                for class_name, prob in prediction_result['probabilities'].items():
+                    logger.info(f"      {class_name:12s}: {prob*100:6.2f}%")
+            logger.info("="*60)
+            
         except Exception as e:
+            logger.error(f"Prediction failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Prediction failed: {str(e)}"
@@ -94,6 +107,7 @@ async def analyze_image(
             "id": analysis_id,
             "prediction": prediction_result["prediction"],
             "confidence": prediction_result["confidence"],
+            "probabilities": prediction_result.get("probabilities", {}),  # ✅ Add probabilities
             "processingTime": prediction_result["processing_time"],
             "analysisDate": datetime.utcnow().isoformat() + "Z",
             "imageInfo": {

@@ -69,15 +69,21 @@ export default function AnalysisScreen({ route, navigation }: any) {
   };
 
   const getResultColor = (prediction: string) => {
-    return prediction === 'BENIGN' ? '#4ade80' : '#f87171';
+    if (prediction === 'BENIGN') return '#4ade80';     // Green - Lành tính
+    if (prediction === 'MALIGNANT') return '#f87171';  // Red - Ác tính
+    return '#60a5fa';  // Blue - Bình thường (NORMAL)
   };
 
   const getResultText = (prediction: string) => {
-    return prediction === 'BENIGN' ? 'Lành tính' : 'Ác tính';
+    if (prediction === 'BENIGN') return 'Lành tính';
+    if (prediction === 'MALIGNANT') return 'Ác tính';
+    return 'Bình thường';  // NORMAL
   };
 
   const getResultIcon = (prediction: string) => {
-    return prediction === 'BENIGN' ? 'checkmark-circle' : 'alert-circle';
+    if (prediction === 'BENIGN') return 'checkmark-circle';
+    if (prediction === 'MALIGNANT') return 'alert-circle';
+    return 'shield-checkmark';  // Icon for NORMAL
   };
 
   const shareResult = () => {
