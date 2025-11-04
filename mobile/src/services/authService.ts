@@ -2,7 +2,7 @@ import { LoginRequest, RegisterRequest, TokenResponse, User, DeviceInfo } from '
 import { Platform } from 'react-native';
 import axios, { AxiosInstance } from 'axios';
 
-const API_BASE_URL = 'http://192.168.1.3:8000/api/v1'; // Android emulator URL
+const API_BASE_URL = 'http://192.168.1.181:8000/api/v1'; // Android emulator URL
 
 class AuthService {
   private client: AxiosInstance;
