@@ -68,14 +68,13 @@ export default function NewHomeScreen({ navigation }: any) {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        // Navigate to analysis screen with image
-        navigation.navigate('Analysis', { imageUri: result.assets[0].uri });
+        // Navigate to image preview screen
+        navigation.navigate('ImagePreview', { imageUri: result.assets[0].uri });
       }
     } catch (error) {
       Alert.alert('Lỗi', 'Không thể chụp ảnh');
@@ -93,14 +92,13 @@ export default function NewHomeScreen({ navigation }: any) {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        // Navigate to analysis screen with image
-        navigation.navigate('Analysis', { imageUri: result.assets[0].uri });
+        // Navigate to image preview screen
+        navigation.navigate('ImagePreview', { imageUri: result.assets[0].uri });
       }
     } catch (error) {
       Alert.alert('Lỗi', 'Không thể chọn hình ảnh');
