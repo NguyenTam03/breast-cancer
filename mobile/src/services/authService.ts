@@ -20,7 +20,11 @@ class AuthService {
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
-        console.error('Auth API Error:', error.response?.data || error.message);
+        if (error.response?.status === 401) {
+          console.log('Phiên đăng nhập đã hết hạn');
+        } else {
+          console.error('Lỗi kết nối:', error.response?.data?.detail || error.message);
+        }
         return Promise.reject(error);
       }
     );
