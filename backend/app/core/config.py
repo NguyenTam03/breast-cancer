@@ -42,7 +42,8 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:19006",  # Expo dev server
         "http://127.0.0.1:3000",
-        "http://127.0.0.1:19006"
+        "http://127.0.0.1:19006",
+        "*"  # Allow all origins for ngrok tunnel
     ]
     ALLOWED_METHODS: List[str] = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     ALLOWED_HEADERS: List[str] = ["*"]
