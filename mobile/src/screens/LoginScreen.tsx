@@ -14,11 +14,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme/colors';
+import { AuthStackParamList } from '../../App';
+
+type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
 
 interface LoginScreenProps {
-  navigation: any;
+  navigation: LoginScreenNavigationProp;
 }
 
 export function LoginScreen({ navigation }: LoginScreenProps) {
@@ -54,7 +58,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={['#3B82F6', '#1D4ED8']}
+        colors={colors.gradient.primary as [string, string]}
         style={styles.gradient}
       >
         <KeyboardAvoidingView
@@ -63,7 +67,7 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
         >
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.header}>
-              <Ionicons name="medical" size={64} color="white" />
+              <Ionicons name="medical" size={64} color={colors.text.primary} />
               <Text style={styles.title}>BreastCare AI</Text>
               <Text style={styles.subtitle}>Chăm sóc sức khỏe thông minh</Text>
             </View>
@@ -120,10 +124,6 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
               </TouchableOpacity>
 
               <View style={styles.footer}>
-                <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-                  <Text style={styles.forgotText}>Quên mật khẩu?</Text>
-                </TouchableOpacity>
-                
                 <View style={styles.registerContainer}>
                   <Text style={styles.registerText}>Chưa có tài khoản? </Text>
                   <TouchableOpacity onPress={() => navigation.navigate('Register')}>
@@ -161,16 +161,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.text.primary,
     marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.text.secondary,
     marginTop: 8,
   },
   form: {
-    backgroundColor: 'white',
+    backgroundColor: colors.background.card,
     borderRadius: 20,
     padding: 24,
     shadowColor: '#000',
@@ -181,16 +181,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.border.primary,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border.primary,
     borderRadius: 12,
     marginBottom: 16,
     paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background.secondary,
   },
   inputIcon: {
     marginRight: 12,
@@ -199,7 +201,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
     fontSize: 16,
-    color: '#111827',
+    color: colors.text.primary,
   },
   passwordInput: {
     paddingRight: 40,
@@ -210,7 +212,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   loginButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.button.primary,
     borderRadius: 12,
     height: 50,
     justifyContent: 'center',
@@ -229,21 +231,16 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
   },
-  forgotText: {
-    color: '#3B82F6',
-    fontSize: 14,
-    marginBottom: 16,
-  },
   registerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   registerText: {
-    color: '#6B7280',
+    color: colors.text.secondary,
     fontSize: 14,
   },
   registerLink: {
-    color: '#3B82F6',
+    color: colors.button.primary,
     fontSize: 14,
     fontWeight: '600',
   },

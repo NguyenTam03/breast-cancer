@@ -28,7 +28,6 @@ interface FeatureCardProps {
 }
 
 export default function NewHomeScreen({ navigation }: any) {
-  const [searchQuery, setSearchQuery] = useState('');
   const [isApiHealthy, setIsApiHealthy] = useState(false);
   const [recentAnalysisCount, setRecentAnalysisCount] = useState(0);
 
@@ -129,30 +128,16 @@ export default function NewHomeScreen({ navigation }: any) {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.profileButton}>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('EditProfile')}
+          >
             <View style={styles.profileImagePlaceholder}>
               <Ionicons name="person" size={20} color="#4c6ef5" />
             </View>
           </TouchableOpacity>
           
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.headerButton}>
-              <Ionicons name="add" size={24} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.headerButton}>
-              <Ionicons name="notifications-outline" size={24} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search" size={20} color="#8e8e93" style={styles.searchIcon} />
-            <Text style={styles.searchPlaceholder}>Tìm kiếm</Text>
-            <TouchableOpacity>
-              <Ionicons name="mic" size={20} color="#8e8e93" />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -280,27 +265,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2a2a3e',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchPlaceholder: {
-    flex: 1,
-    color: '#8e8e93',
-    fontSize: 16,
   },
   mainCardContainer: {
     paddingHorizontal: 20,

@@ -8,6 +8,7 @@ interface AuthContextType extends AuthState {
   register: (email: string, password: string, firstName: string, lastName: string, role?: 'doctor' | 'patient') => Promise<void>;
   logout: () => Promise<void>;
   checkAuthState: () => Promise<void>;
+  updateProfile: (profileData: { firstName: string; lastName: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -183,6 +184,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateProfile = async (profileData: { firstName: string; lastName: string }) => {
+    try {
+      if (!authState.accessToken) {
+        throw new Error('Không có token xác thực');
+      }
+
+      setAuthState(prev => ({ ...prev, isLoading: true }));
+      
+      const updatedUser = await authService.updateProfile(authState.accessToken, profileData);
+      
+      // Update user data in storage
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(updatedUser));
+      
+      setAuthState(prev => ({
+        ...prev,
+        user: updatedUser,
+        isLoading: false,
+      }));
+    } catch (error) {
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       if (authState.accessToken) {
@@ -212,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     checkAuthState,
+    updateProfile,
   };
 
   return (

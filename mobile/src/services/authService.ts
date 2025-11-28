@@ -1,8 +1,7 @@
 import { LoginRequest, RegisterRequest, TokenResponse, User, DeviceInfo } from '../types/auth.types';
 import { Platform } from 'react-native';
 import axios, { AxiosInstance } from 'axios';
-
-const API_BASE_URL = 'http://192.168.1.181:8000/api/v1'; // Android emulator URL
+import { API_BASE_URL, API_TIMEOUT, COMMON_HEADERS } from '../config/api.config';
 
 class AuthService {
   private client: AxiosInstance;
@@ -10,10 +9,8 @@ class AuthService {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 10000, // 10 seconds timeout
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      timeout: API_TIMEOUT,
+      headers: COMMON_HEADERS,
     });
 
     // Response interceptor for error handling
@@ -117,6 +114,26 @@ class AuthService {
         throw new Error(error.response.data.detail);
       } else {
         throw new Error('Không thể làm mới token: ' + error.message);
+      }
+    }
+  }
+
+  async updateProfile(
+    accessToken: string,
+    profileData: { firstName: string; lastName: string }
+  ): Promise<User> {
+    try {
+      const response = await this.client.put('/users/me', profileData, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data?.detail) {
+        throw new Error(error.response.data.detail);
+      } else {
+        throw new Error('Không thể cập nhật hồ sơ: ' + error.message);
       }
     }
   }

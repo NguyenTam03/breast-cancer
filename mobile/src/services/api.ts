@@ -5,11 +5,7 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AnalysisResult, AnalysisHistory } from '../types/analysis.types';
-
-// API Configuration  
-// For Android emulator, use 10.0.2.2 instead of localhost
-// For physical device or iOS simulator, use your computer's IP address
-const API_BASE_URL = 'http://192.168.1.181:8000/api/v1';
+import { API_BASE_URL, API_TIMEOUT, COMMON_HEADERS } from '../config/api.config';
 
 class ApiService {
   private client: AxiosInstance;
@@ -17,9 +13,11 @@ class ApiService {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      timeout: 30000, // 30 seconds timeout for image upload
-      headers: {
-        'Content-Type': 'application/json',
+      timeout: API_TIMEOUT,
+      headers: COMMON_HEADERS,
+      // Add additional config for React Native
+      validateStatus: function (status) {
+        return status >= 200 && status < 300;
       },
     });
 
@@ -42,10 +40,25 @@ class ApiService {
       }
     );
 
-    // Response interceptor
+    // Response interceptor with retry logic for Render cold start
     this.client.interceptors.response.use(
       (response) => response,
-      (error) => {
+      async (error) => {
+        const originalRequest = error.config;
+        
+        // If it's a network error and we haven't retried yet
+        if (error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+          if (!originalRequest._retry) {
+            originalRequest._retry = true;
+            console.log('Render service might be sleeping, retrying in 5 seconds...');
+            
+            // Wait 5 seconds for Render to wake up
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            return this.client(originalRequest);
+          }
+        }
+        
         console.error('API Error:', error.response?.data || error.message);
         return Promise.reject(error);
       }

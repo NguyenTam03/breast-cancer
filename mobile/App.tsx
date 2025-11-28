@@ -10,12 +10,14 @@ import { View, Text, ActivityIndicator } from 'react-native';
 // Import auth
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { RegisterScreen } from './src/screens/RegisterScreen';
 
 // Import screens
 import NewHomeScreen from './src/screens/NewHomeScreen';
 import AnalysisScreen from './src/screens/AnalysisScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import EditProfileScreen from './src/screens/EditProfileScreen';
 import ImagePreviewScreen from './src/screens/ImagePreviewScreen';
 import ImageCropScreen from './src/screens/ImageCropScreen';
 
@@ -26,6 +28,12 @@ export type RootStackParamList = {
   ImageCrop: { imageUri: string };
   Analysis: { imageUri: string };
   HistoryMain: undefined;
+  EditProfile: undefined;
+};
+
+export type AuthStackParamList = {
+  Login: undefined;
+  Register: undefined;
 };
 
 // Create navigators
@@ -55,6 +63,7 @@ function HomeStack() {
       <Stack.Screen name="ImagePreview" component={ImagePreviewScreen} />
       <Stack.Screen name="ImageCrop" component={ImageCropScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     </Stack.Navigator>
   );
 }
@@ -70,6 +79,21 @@ function HistoryStack() {
     >
       <Stack.Screen name="HistoryMain" component={HistoryScreen} />
       <Stack.Screen name="Analysis" component={AnalysisScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Settings Stack Navigator
+function SettingsStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#1a1a2e' }
+      }}
+    >
+      <Stack.Screen name="SettingsMain" component={SettingsScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
     </Stack.Navigator>
   );
 }
@@ -126,9 +150,9 @@ function MainTabs() {
           tabBarLabel: 'Phân tích',
         }}
       />
-      <Tab.Screen 
-        name="SettingsTab" 
-        component={SettingsScreen}
+      <Tab.Screen
+        name="SettingsTab"
+        component={SettingsStack}
         options={{
           tabBarLabel: 'Cài đặt',
         }}
@@ -139,15 +163,16 @@ function MainTabs() {
 
 // Auth Stack Navigator for login flow
 function AuthStack() {
-  const AuthStackNav = createStackNavigator();
+  const AuthStackNav = createStackNavigator<AuthStackParamList>();
   return (
-    <AuthStackNav.Navigator 
-      screenOptions={{ 
+    <AuthStackNav.Navigator
+      screenOptions={{
         headerShown: false,
         cardStyle: { backgroundColor: '#1a1a2e' }
       }}
     >
       <AuthStackNav.Screen name="Login" component={LoginScreen} />
+      <AuthStackNav.Screen name="Register" component={RegisterScreen} />
     </AuthStackNav.Navigator>
   );
 }

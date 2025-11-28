@@ -8,6 +8,7 @@ import {
   StatusBar,
   Alert,
   Switch,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,9 +36,6 @@ interface SettingItem {
 export default function SettingsScreen({ navigation }: SettingsScreenProps) {
   const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState(true);
-  const [biometric, setBiometric] = useState(false);
-  const [darkMode, setDarkMode] = useState(true);
-  const [autoUpload, setAutoUpload] = useState(false);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -68,15 +66,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       subtitle: 'Chỉnh sửa thông tin cá nhân',
       icon: 'person-outline',
       type: 'navigation',
-      onPress: () => Alert.alert('Hồ sơ', 'Chức năng đang phát triển'),
-    },
-    {
-      id: 'security',
-      title: 'Bảo mật và quyền riêng tư',
-      subtitle: 'Quản lý cài đặt bảo mật',
-      icon: 'shield-checkmark-outline',
-      type: 'navigation',
-      onPress: () => Alert.alert('Bảo mật', 'Chức năng đang phát triển'),
+      onPress: () => navigation.navigate('EditProfile'),
     },
   ];
 
@@ -90,44 +80,9 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       value: notifications,
       onToggle: setNotifications,
     },
-    {
-      id: 'biometric',
-      title: 'Xác thực sinh trí học',
-      subtitle: 'Sử dụng vân tay hoặc Face ID',
-      icon: 'finger-print-outline',
-      type: 'switch',
-      value: biometric,
-      onToggle: setBiometric,
-    },
-    {
-      id: 'theme',
-      title: 'Giao diện tối',
-      subtitle: 'Sử dụng giao diện tối',
-      icon: 'moon-outline',
-      type: 'switch',
-      value: darkMode,
-      onToggle: setDarkMode,
-    },
-    {
-      id: 'autoUpload',
-      title: 'Tự động lưu cloud',
-      subtitle: 'Lưu kết quả lên cloud tự động',
-      icon: 'cloud-upload-outline',
-      type: 'switch',
-      value: autoUpload,
-      onToggle: setAutoUpload,
-    },
   ];
 
   const dataSettings: SettingItem[] = [
-    {
-      id: 'export',
-      title: 'Xuất dữ liệu',
-      subtitle: 'Xuất lịch sử phân tích',
-      icon: 'download-outline',
-      type: 'action',
-      onPress: () => Alert.alert('Xuất dữ liệu', 'Chức năng đang phát triển'),
-    },
     {
       id: 'clear',
       title: 'Xóa dữ liệu',
@@ -149,20 +104,27 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
 
   const supportSettings: SettingItem[] = [
     {
-      id: 'help',
-      title: 'Trợ giúp & FAQ',
-      subtitle: 'Câu hỏi thường gặp',
-      icon: 'help-circle-outline',
-      type: 'navigation',
-      onPress: () => Alert.alert('Trợ giúp', 'Chức năng đang phát triển'),
-    },
-    {
       id: 'contact',
       title: 'Liên hệ hỗ trợ',
       subtitle: 'Gửi phản hồi hoặc báo lỗi',
       icon: 'mail-outline',
       type: 'navigation',
-      onPress: () => Alert.alert('Liên hệ', 'Chức năng đang phát triển'),
+      onPress: () => {
+        const email = 'n21dccn158@student.ptithcm.edu.vn';
+        const subject = 'Hỗ trợ ứng dụng BreastCare AI';
+        const body = 'Xin chào, tôi cần hỗ trợ về vấn đề: ';
+        const url = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        
+        Linking.canOpenURL(url)
+          .then((supported) => {
+            if (!supported) {
+              Alert.alert('Lỗi', 'Không thể mở ứng dụng email');
+            } else {
+              return Linking.openURL(url);
+            }
+          })
+          .catch((err) => console.error('An error occurred', err));
+      },
     },
     {
       id: 'about',
@@ -170,7 +132,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       subtitle: 'Phiên bản 1.0.0',
       icon: 'information-circle-outline',
       type: 'navigation',
-      onPress: () => Alert.alert('Về ứng dụng', 'BreastCare AI v1.0.0\nPhát triển bởi AI Team'),
+      onPress: () => Alert.alert('Về ứng dụng', 'BreastCare AI v1.0.0\nPhát triển bởi Nhân & Tâm'),
     },
   ];
 
@@ -266,7 +228,10 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
                       {user?.role === 'doctor' ? '👨‍⚕️ Bác sĩ' : '👤 Bệnh nhân'}
                     </Text>
                   </View>
-                  <TouchableOpacity style={styles.editProfileButton}>
+                  <TouchableOpacity
+                    style={styles.editProfileButton}
+                    onPress={() => navigation.navigate('EditProfile')}
+                  >
                     <Text style={styles.editProfileText}>Chỉnh sửa hồ sơ</Text>
                   </TouchableOpacity>
                 </View>
