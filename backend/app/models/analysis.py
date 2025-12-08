@@ -23,7 +23,8 @@ class AnalysisType(str, Enum):
 class ImageInfo(BaseModel):
     """Image information"""
     originalName: str
-    filePath: str
+    filePath: Optional[str] = None  # Keep for backward compatibility
+    imageData: Optional[str] = None  # Base64 encoded image data
     fileSize: int  # in bytes
     mimeType: str
     dimensions: dict  # {"width": int, "height": int}

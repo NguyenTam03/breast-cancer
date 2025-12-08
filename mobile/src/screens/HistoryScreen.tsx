@@ -20,9 +20,7 @@ import { colors } from '../theme/colors';
 import { apiService } from '../services/api';
 import { AnalysisResult } from '../types/analysis.types';
 import { useAuth } from '../contexts/AuthContext';
-
-// API Base URL for images
-const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';
+import { API_BASE_URL } from '../config/api.config';
 
 interface HistoryScreenProps {
   navigation: any;
@@ -96,15 +94,42 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
   };
 
   const getResultColor = (prediction: string) => {
-    return prediction === 'BENIGN' ? '#4ade80' : '#f87171';
+    switch (prediction) {
+      case 'BENIGN':
+        return '#4ade80'; // Xanh lá - Lành tính
+      case 'MALIGNANT':
+        return '#f87171'; // Đỏ - Ác tính
+      case 'NORMAL':
+        return '#60a5fa'; // Xanh dương - Bình thường
+      default:
+        return '#8e8e93'; // Xám - Không xác định
+    }
   };
 
   const getResultText = (prediction: string) => {
-    return prediction === 'BENIGN' ? 'Lành tính' : 'Ác tính';
+    switch (prediction) {
+      case 'BENIGN':
+        return 'Lành tính';
+      case 'MALIGNANT':
+        return 'Ác tính';
+      case 'NORMAL':
+        return 'Bình thường';
+      default:
+        return 'Không xác định';
+    }
   };
 
   const getResultIcon = (prediction: string) => {
-    return prediction === 'BENIGN' ? 'checkmark-circle' : 'alert-circle';
+    switch (prediction) {
+      case 'BENIGN':
+        return 'checkmark-circle';
+      case 'MALIGNANT':
+        return 'alert-circle';
+      case 'NORMAL':
+        return 'shield-checkmark';
+      default:
+        return 'help-circle';
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -167,6 +192,7 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
   const filteredData = historyData.filter((item) => {
     if (selectedFilter === 'benign') return item.prediction === 'BENIGN';
     if (selectedFilter === 'malignant') return item.prediction === 'MALIGNANT';
+    if (selectedFilter === 'normal') return item.prediction === 'NORMAL';
     return true;
   });
 
@@ -181,78 +207,113 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
     </TouchableOpacity>
   );
 
-  const renderHistoryItem = ({ item }: { item: AnalysisResult }) => (
-    <Card style={styles.historyItem} padding="medium">
-      <TouchableOpacity onPress={() => handleItemPress(item)} activeOpacity={0.8}>
-        <View style={styles.itemContent}>
-          <View style={styles.itemImage}>
-            {item.imageUrl ? (
-              <Image 
-                source={{ uri: `${API_BASE_URL}${item.imageUrl}` }} 
-                style={styles.thumbnail}
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View style={styles.thumbnailPlaceholder}>
-                <Ionicons name="image-outline" size={24} color="#8e8e93" />
-              </View>
-            )}
-          </View>
-          
-          <View style={styles.itemInfo}>
-            <View style={styles.itemHeader}>
-              <View style={styles.resultBadge}>
-                <Ionicons 
-                  name={getResultIcon(item.prediction)} 
-                  size={16} 
-                  color={getResultColor(item.prediction)} 
-                />
-                <Text style={[styles.resultText, { color: getResultColor(item.prediction) }]}>
-                  {getResultText(item.prediction)}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => handleDeleteItem(item)}>
-                <Ionicons name="trash-outline" size={20} color="#8e8e93" />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.itemDetails}>
-              <View style={styles.detailRow}>
-                <Ionicons name="analytics-outline" size={14} color="#8e8e93" />
-                <Text style={styles.detailText}>
-                  Độ tin cậy: {(item.confidence * 100).toFixed(1)}%
-                </Text>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <Ionicons name="time-outline" size={14} color="#8e8e93" />
-                <Text style={styles.detailText}>
-                  {formatDate(item.analysisDate)}
-                </Text>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <Ionicons name="speedometer-outline" size={14} color="#8e8e93" />
-                <Text style={styles.detailText}>
-                  Xử lý: {item.processingTime}ms
-                </Text>
-              </View>
+  const renderHistoryItem = ({ item }: { item: AnalysisResult }) => {
+    // Construct proper image URL
+    const getImageUrl = () => {
+      if (!item.imageUrl) return null;
+      
+      // If imageUrl already contains full URL (starts with http), use as is
+      if (item.imageUrl.startsWith('http')) {
+        return item.imageUrl;
+      }
+      
+      // Otherwise, prepend API_BASE_URL
+      const baseUrl = API_BASE_URL.replace('/api/v1', ''); // Remove API path for image URLs
+      return `${baseUrl}${item.imageUrl}`;
+    };
 
-              {item.userNotes && (
-                <View style={styles.detailRow}>
-                  <Ionicons name="document-text-outline" size={14} color="#8e8e93" />
-                  <Text style={styles.detailText} numberOfLines={1}>
-                    {item.userNotes}
-                  </Text>
+    const imageUri = getImageUrl();
+
+    return (
+      <Card style={styles.historyItem} padding="medium">
+        <TouchableOpacity onPress={() => handleItemPress(item)} activeOpacity={0.8}>
+          <View style={styles.itemContent}>
+            <View style={styles.itemImage}>
+              {imageUri ? (
+                <Image 
+                  source={{ uri: imageUri }}
+                  style={styles.thumbnail}
+                  contentFit="cover"
+                  transition={300}
+                  // Enable caching
+                  cachePolicy="memory-disk"
+                  recyclingKey={item.id}
+                  // Error fallback
+                  onError={() => {
+                    console.warn('Failed to load image:', imageUri);
+                  }}
+                />
+              ) : (
+                <View style={styles.thumbnailPlaceholder}>
+                  <Ionicons name="image-outline" size={24} color="#8e8e93" />
                 </View>
               )}
             </View>
+            
+            <View style={styles.itemInfo}>
+              <View style={styles.itemHeader}>
+                <View style={styles.resultBadge}>
+                  <Ionicons 
+                    name={getResultIcon(item.prediction)} 
+                    size={16} 
+                    color={getResultColor(item.prediction)} 
+                  />
+                  <Text style={[styles.resultText, { color: getResultColor(item.prediction) }]}>
+                    {getResultText(item.prediction)}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => handleDeleteItem(item)}>
+                  <Ionicons name="trash-outline" size={20} color="#8e8e93" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.itemDetails}>
+                <View style={styles.detailRow}>
+                  <Ionicons name="analytics-outline" size={14} color="#8e8e93" />
+                  <Text style={styles.detailText}>
+                    Độ tin cậy: {(item.confidence * 100).toFixed(1)}%
+                  </Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Ionicons name="time-outline" size={14} color="#8e8e93" />
+                  <Text style={styles.detailText}>
+                    {formatDate(item.analysisDate)}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Ionicons name="speedometer-outline" size={14} color="#8e8e93" />
+                  <Text style={styles.detailText}>
+                    Xử lý: {item.processingTime}ms
+                  </Text>
+                </View>
+
+                {item.userNotes && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="document-text-outline" size={14} color="#8e8e93" />
+                    <Text style={styles.detailText} numberOfLines={1}>
+                      {item.userNotes}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Debug URL - can be removed later */}
+                {__DEV__ && imageUri && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="link-outline" size={14} color="#8e8e93" />
+                    <Text style={[styles.detailText, { fontSize: 10 }]} numberOfLines={1}>
+                      {imageUri}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
-    </Card>
-  );
+        </TouchableOpacity>
+      </Card>
+    );
+  };
 
   const renderLoadingFooter = () => {
     if (!loading || page === 1) return null;
@@ -334,6 +395,15 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
                 </Text>
                 <Text style={styles.statLabel}>Ác tính</Text>
               </View>
+
+              <View style={styles.statDivider} />
+              
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>
+                  {historyData.filter(item => item.prediction === 'NORMAL').length}
+                </Text>
+                <Text style={styles.statLabel}>Bình thường</Text>
+              </View>
             </View>
           </Card>
         </View>
@@ -344,6 +414,7 @@ export default function HistoryScreen({ navigation }: HistoryScreenProps) {
             <FilterButton title="Tất cả" value="all" isActive={selectedFilter === 'all'} />
             <FilterButton title="Lành tính" value="benign" isActive={selectedFilter === 'benign'} />
             <FilterButton title="Ác tính" value="malignant" isActive={selectedFilter === 'malignant'} />
+            <FilterButton title="Bình thường" value="normal" isActive={selectedFilter === 'normal'} />
           </View>
         </View>
 

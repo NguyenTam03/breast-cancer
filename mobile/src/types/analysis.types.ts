@@ -5,7 +5,7 @@ export interface AnalysisRequest {
 
 export interface AnalysisResult {
   id: string;
-  prediction: 'BENIGN' | 'MALIGNANT';
+  prediction: 'BENIGN' | 'MALIGNANT' | 'NORMAL';
   confidence: number;
   processingTime: number;
   analysisDate: string;
@@ -38,7 +38,7 @@ export interface ImageInfo {
 }
 
 export interface MLResults {
-  prediction: 'BENIGN' | 'MALIGNANT';
+  prediction: 'BENIGN' | 'MALIGNANT' | 'NORMAL';
   confidence: number;
   processingTime: number;
   modelVersion: string;

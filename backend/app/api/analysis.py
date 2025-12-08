@@ -6,10 +6,11 @@ import os
 import io
 import uuid
 import aiofiles
+import base64
 import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import HTTPBearer
 from typing import List, Optional
 from PIL import Image
@@ -89,18 +90,23 @@ async def analyze_image(
         # Generate unique analysis ID
         analysis_id = str(uuid.uuid4())
         
-        # Save uploaded image to uploads directory
+        # Convert image to base64 for MongoDB storage
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Keep file saving for backward compatibility (optional)
         upload_dir = "uploads"
         os.makedirs(upload_dir, exist_ok=True)
-        
-        # Create filename with analysis ID
         file_extension = os.path.splitext(image.filename)[1]
         saved_filename = f"{analysis_id}{file_extension}"
         file_path = os.path.join(upload_dir, saved_filename)
         
-        # Save file
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(image_data)
+        # Save file (for local development/backup)
+        try:
+            async with aiofiles.open(file_path, 'wb') as f:
+                await f.write(image_data)
+        except Exception as e:
+            logger.warning(f"Failed to save local file: {e}")
+            file_path = None  # Will rely on base64 data
         
         # Prepare response
         analysis_result = {
@@ -130,7 +136,8 @@ async def analyze_image(
                 userId=current_user.id,  # Use current authenticated user
                 imageInfo=ImageInfo(
                     originalName=image.filename,
-                    filePath=file_path,
+                    filePath=file_path,  # Keep for compatibility
+                    imageData=image_base64,  # ✅ Store base64 in MongoDB
                     fileSize=file_size,
                     mimeType=image.content_type,
                     dimensions={"width": width, "height": height}
@@ -182,19 +189,36 @@ async def get_analysis_image(analysis_id: str):
                 detail="Analysis not found"
             )
         
-        # Check if image file exists
+        # ✅ Priority 1: Try to get image from base64 data (MongoDB)
+        if analysis.imageInfo.imageData:
+            try:
+                # Decode base64 image data
+                image_bytes = base64.b64decode(analysis.imageInfo.imageData)
+                
+                # Return image as Response
+                return Response(
+                    content=image_bytes,
+                    media_type=analysis.imageInfo.mimeType,
+                    headers={
+                        "Content-Disposition": f"inline; filename={analysis.imageInfo.originalName}"
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to decode base64 image: {e}")
+        
+        # ✅ Fallback: Try to get image from file path (for backward compatibility)
         image_path = analysis.imageInfo.filePath
-        if not image_path or not os.path.exists(image_path):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Image file not found"
+        if image_path and os.path.exists(image_path):
+            return FileResponse(
+                path=image_path,
+                media_type=analysis.imageInfo.mimeType,
+                filename=analysis.imageInfo.originalName
             )
         
-        # Return image file
-        return FileResponse(
-            path=image_path,
-            media_type=analysis.imageInfo.mimeType,
-            filename=analysis.imageInfo.originalName
+        # No image available
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image data not found"
         )
         
     except HTTPException:
