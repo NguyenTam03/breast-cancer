@@ -25,6 +25,7 @@ class ImageInfo(BaseModel):
     originalName: str
     filePath: Optional[str] = None  # Keep for backward compatibility
     imageData: Optional[str] = None  # Base64 encoded image data
+    gridfsId: Optional[str] = None  # GridFS file id
     fileSize: int  # in bytes
     mimeType: str
     dimensions: dict  # {"width": int, "height": int}

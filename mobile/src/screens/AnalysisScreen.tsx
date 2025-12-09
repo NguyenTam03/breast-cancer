@@ -19,21 +19,19 @@ import { AnalysisResult } from '../types/analysis.types';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { colors } from '../theme/colors';
+import { API_BASE_URL } from '../config/api.config';
 
 export default function AnalysisScreen({ route, navigation }: any) {
   const { imageUri, analysisResult: existingResult, isFromHistory, analysisType } = route.params;
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(existingResult || null);
   const [fadeAnim] = useState(new Animated.Value(1));
 
-  // API Base URL for images
-  const API_BASE_URL = 'http://10.0.2.2:8000/api/v1';
-
   // Determine analysis type
   const isFeatureBasedAnalysis = analysisType === 'features' || existingResult?.analysisType === 'features';
 
   // Determine the image source
   const imageSource = isFromHistory && existingResult?.imageUrl 
-    ? `${API_BASE_URL}${existingResult.imageUrl}`
+    ? (existingResult.imageUrl.startsWith('http') ? existingResult.imageUrl : `${API_BASE_URL}${existingResult.imageUrl}`)
     : imageUri;
 
   // Mutation for image analysis

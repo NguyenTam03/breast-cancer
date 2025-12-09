@@ -9,14 +9,19 @@ import aiofiles
 import base64
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.security import HTTPBearer
 from typing import List, Optional
+
+from bson import ObjectId
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+from fastapi.responses import FileResponse, Response
+from fastapi.security import HTTPBearer
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from PIL import Image
 from beanie import PydanticObjectId
 from pydantic import BaseModel, Field
+from gridfs.errors import NoFile
 
+from app.core.database import db
 from app.models.analysis import Analysis, PredictionResult, ImageInfo, MLResults, AnalysisMetadata, AnalysisType
 from app.models.user import User
 from app.ml.model_service import predict_breast_cancer, get_predictor
@@ -26,6 +31,87 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 security = HTTPBearer()
+
+
+def get_gridfs_bucket() -> AsyncIOMotorGridFSBucket:
+    """Return GridFS bucket bound to current database."""
+    if not db.database:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database is not initialized",
+        )
+    return AsyncIOMotorGridFSBucket(db.database)
+
+
+@router.post("/images")
+async def upload_image(
+    image: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload an image to GridFS and return its id + URL."""
+    if not image.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+
+    image_bytes = await image.read()
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size too large. Maximum 10MB allowed."
+        )
+
+    bucket = get_gridfs_bucket()
+    filename = image.filename or "upload.jpg"
+    try:
+        file_id = await bucket.upload_from_stream(
+            filename,
+            image_bytes,
+            metadata={
+                "contentType": image.content_type,
+                "userId": str(current_user.id),
+                "originalName": filename,
+                "uploadedAt": datetime.utcnow(),
+            },
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload image: {e}")
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save image"
+        )
+
+    return {
+        "id": str(file_id),
+        "url": f"/analysis/images/{file_id}",
+        "filename": filename,
+        "contentType": image.content_type,
+        "size": len(image_bytes),
+    }
+
+
+@router.get("/images/{file_id}")
+async def download_image(file_id: str):
+    """Download/stream image from GridFS by file id."""
+    try:
+        bucket = get_gridfs_bucket()
+        grid_out = await bucket.open_download_stream(ObjectId(file_id))
+        media_type = (grid_out.metadata or {}).get("contentType", "application/octet-stream")
+        headers = {"Content-Disposition": f"inline; filename={grid_out.filename}"}
+        data = await grid_out.read()
+        return Response(content=data, media_type=media_type, headers=headers)
+    except NoFile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image not found"
+        )
+    except Exception as e:
+        logger.error(f"Failed to download image: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve image"
+        )
 
 
 @router.post("/predict")
@@ -42,17 +128,17 @@ async def analyze_image(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be an image"
         )
-    
-    # Check file size (max 10MB)
-    if image.size > 10 * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File size too large. Maximum 10MB allowed."
-        )
-    
+
     try:
         # Read image data
         image_data = await image.read()
+
+        # Check file size (max 10MB)
+        if len(image_data) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size too large. Maximum 10MB allowed."
+            )
         
         # Get image dimensions
         try:
@@ -89,24 +175,40 @@ async def analyze_image(
         
         # Generate unique analysis ID
         analysis_id = str(uuid.uuid4())
-        
-        # Convert image to base64 for MongoDB storage
-        image_base64 = base64.b64encode(image_data).decode('utf-8')
-        
-        # Keep file saving for backward compatibility (optional)
+
+        # Determine filename and extension
+        file_extension = os.path.splitext(image.filename or "upload.jpg")[1] or ".jpg"
+        saved_filename = f"{analysis_id}{file_extension}"
         upload_dir = "uploads"
         os.makedirs(upload_dir, exist_ok=True)
-        file_extension = os.path.splitext(image.filename)[1]
-        saved_filename = f"{analysis_id}{file_extension}"
         file_path = os.path.join(upload_dir, saved_filename)
-        
-        # Save file (for local development/backup)
+
+        # Save to GridFS (primary storage)
+        gridfs_id = None
+        try:
+            bucket = get_gridfs_bucket()
+            metadata = {
+                "originalName": image.filename,
+                "contentType": image.content_type,
+                "userId": str(current_user.id),
+                "analysisId": analysis_id,
+                "uploadedAt": datetime.utcnow(),
+            }
+            gridfs_id = await bucket.upload_from_stream(
+                saved_filename,
+                image_data,
+                metadata=metadata
+            )
+        except Exception as e:
+            logger.error(f"Failed to save image to GridFS: {e}")
+
+        # Save file locally for backward compatibility (best-effort)
         try:
             async with aiofiles.open(file_path, 'wb') as f:
                 await f.write(image_data)
         except Exception as e:
             logger.warning(f"Failed to save local file: {e}")
-            file_path = None  # Will rely on base64 data
+            file_path = None
         
         # Prepare response
         analysis_result = {
@@ -119,10 +221,12 @@ async def analyze_image(
             "imageInfo": {
                 "originalName": image.filename,
                 "savedPath": file_path,
+                "gridfsId": str(gridfs_id) if gridfs_id else None,
                 "fileSize": file_size,
                 "mimeType": image.content_type,
                 "dimensions": {"width": width, "height": height}
             },
+            "imageUrl": f"/analysis/images/{gridfs_id}" if gridfs_id else f"/analysis/image/{analysis_id}",
             "userNotes": notes,
             "isBookmarked": False,
             "tags": [],
@@ -137,7 +241,8 @@ async def analyze_image(
                 imageInfo=ImageInfo(
                     originalName=image.filename,
                     filePath=file_path,  # Keep for compatibility
-                    imageData=image_base64,  # ✅ Store base64 in MongoDB
+                    imageData=None,  # Use GridFS instead of base64
+                    gridfsId=str(gridfs_id) if gridfs_id else None,
                     fileSize=file_size,
                     mimeType=image.content_type,
                     dimensions={"width": width, "height": height}
@@ -188,14 +293,29 @@ async def get_analysis_image(analysis_id: str):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Analysis not found"
             )
-        
-        # ✅ Priority 1: Try to get image from base64 data (MongoDB)
+
+        # ✅ Priority 1: Try to stream from GridFS
+        if analysis.imageInfo.gridfsId:
+            try:
+                bucket = get_gridfs_bucket()
+                grid_out = await bucket.open_download_stream(ObjectId(analysis.imageInfo.gridfsId))
+                media_type = (
+                    (grid_out.metadata or {}).get("contentType")
+                    or analysis.imageInfo.mimeType
+                    or "application/octet-stream"
+                )
+                headers = {"Content-Disposition": f"inline; filename={analysis.imageInfo.originalName}"}
+                data = await grid_out.read()
+                return Response(content=data, media_type=media_type, headers=headers)
+            except NoFile:
+                logger.warning(f"GridFS file not found for analysis {analysis_id}")
+            except Exception as e:
+                logger.error(f"Failed to stream from GridFS: {e}")
+
+        # ✅ Priority 2: Try to get image from base64 data (legacy)
         if analysis.imageInfo.imageData:
             try:
-                # Decode base64 image data
                 image_bytes = base64.b64decode(analysis.imageInfo.imageData)
-                
-                # Return image as Response
                 return Response(
                     content=image_bytes,
                     media_type=analysis.imageInfo.mimeType,
@@ -233,6 +353,7 @@ async def get_analysis_image(analysis_id: str):
 
 @router.get("/history")
 async def get_analysis_history(
+    request: Request,
     page: int = 1,
     pageSize: int = 10,
     filter_prediction: Optional[str] = None
@@ -263,6 +384,18 @@ async def get_analysis_history(
         # Format analyses to match mobile app expected structure
         formatted_analyses = []
         for analysis in analyses:
+            image_url = None
+            if analysis.imageInfo.gridfsId:
+                try:
+                    image_url = str(request.url_for("download_image", file_id=analysis.imageInfo.gridfsId))
+                except Exception:
+                    image_url = f"/analysis/images/{analysis.imageInfo.gridfsId}"
+            else:
+                try:
+                    image_url = str(request.url_for("get_analysis_image", analysis_id=str(analysis.id)))
+                except Exception:
+                    image_url = f"/analysis/image/{analysis.id}"
+
             formatted_analysis = {
                 "id": str(analysis.id),
                 "prediction": analysis.mlResults.prediction,
@@ -275,7 +408,7 @@ async def get_analysis_history(
                     "mimeType": analysis.imageInfo.mimeType,
                     "dimensions": analysis.imageInfo.dimensions
                 },
-                "imageUrl": f"/analysis/image/{str(analysis.id)}",  # Add image URL
+                "imageUrl": image_url,
                 "userNotes": analysis.userNotes,
                 "isBookmarked": analysis.isBookmarked,
                 "tags": analysis.tags
@@ -299,6 +432,7 @@ async def get_analysis_history(
 
 @router.get("/history/{user_id}")
 async def get_user_analysis_history(
+    request: Request,
     user_id: str,
     page: int = 1,
     pageSize: int = 10,
@@ -327,6 +461,18 @@ async def get_user_analysis_history(
         # Format analyses to match mobile app expected structure
         formatted_analyses = []
         for analysis in analyses:
+            image_url = None
+            if analysis.imageInfo.gridfsId:
+                try:
+                    image_url = str(request.url_for("download_image", file_id=analysis.imageInfo.gridfsId))
+                except Exception:
+                    image_url = f"/analysis/images/{analysis.imageInfo.gridfsId}"
+            else:
+                try:
+                    image_url = str(request.url_for("get_analysis_image", analysis_id=str(analysis.id)))
+                except Exception:
+                    image_url = f"/analysis/image/{analysis.id}"
+
             formatted_analysis = {
                 "id": str(analysis.id),
                 "prediction": analysis.mlResults.prediction,
@@ -339,7 +485,7 @@ async def get_user_analysis_history(
                     "mimeType": analysis.imageInfo.mimeType,
                     "dimensions": analysis.imageInfo.dimensions
                 },
-                "imageUrl": f"/analysis/image/{str(analysis.id)}",  # Add image URL
+                "imageUrl": image_url,
                 "userNotes": analysis.userNotes,
                 "isBookmarked": analysis.isBookmarked,
                 "tags": analysis.tags,
